@@ -5,94 +5,218 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gateway</title>
 <style>
-body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#0f1115;color:#e6e6e6}
-header{padding:16px 24px;background:#1a1d24;border-bottom:1px solid #2a2e38}
-header h1{margin:0;font-size:20px}
-main{padding:24px;max-width:1100px;margin:0 auto}
-nav{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
-nav button{background:#2a2e38;color:#e6e6e6;border:1px solid #3a3f4b;padding:8px 14px;border-radius:8px;cursor:pointer}
-nav button.active{background:#4f6ef7;border-color:#4f6ef7}
-.card{background:#1a1d24;border:1px solid #2a2e38;border-radius:12px;padding:16px;margin-bottom:16px}
-input,select,textarea{background:#0f1115;color:#e6e6e6;border:1px solid #3a3f4b;border-radius:6px;padding:8px;width:100%;box-sizing:border-box}
-button.primary{background:#4f6ef7;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer}
-button.danger{background:#e05252;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer}
-table{width:100%;border-collapse:collapse}
-th,td{padding:8px;border-bottom:1px solid #2a2e38;text-align:left;font-size:14px}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#2a2e38}
-.badge.ok{background:#1f6f3f}
-.badge.off{background:#6f1f1f}
+:root{
+  --bg:#0b0d12;--bg2:#12151d;--card:#171b24;--card2:#1f2430;
+  --border:#2a3040;--text:#e8ecf4;--muted:#8a93a6;--accent:#6c8cff;
+  --accent2:#8b5cf6;--ok:#22c55e;--danger:#ef4444;--warn:#f59e0b;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(1200px 600px at 10% -10%,#1a2340 0%,transparent 60%),radial-gradient(900px 500px at 100% 0%,#2a1a40 0%,transparent 55%),var(--bg);color:var(--text);min-height:100vh}
+a{color:var(--accent)}
+header{position:sticky;top:0;z-index:10;padding:14px 24px;background:rgba(11,13,18,.7);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+header h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.2px}
+header .pill{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:4px 10px;border-radius:999px}
+main{padding:20px;max-width:1200px;margin:0 auto}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.03),transparent),var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);animation:fadeUp .35s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-label{font-size:13px;color:#9aa0ad;display:block;margin-bottom:4px}
-.section{display:none}
+.grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+input,select,textarea{background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px;width:100%;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,140,255,.18)}
+button{border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600;transition:transform .12s,filter .12s,background .15s}
+button:active{transform:scale(.97)}
+button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+button.ghost{background:var(--card2);color:var(--text);border:1px solid var(--border)}
+button.danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+button.sm{padding:6px 10px;font-size:12px;border-radius:8px}
+nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+nav button{background:var(--card2);color:var(--muted);border:1px solid var(--border);padding:8px 14px;border-radius:999px;font-weight:500}
+nav button.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
+.section{display:none;animation:fadeUp .3s ease}
 .section.active{display:block}
-pre{background:#0f1115;padding:12px;border-radius:8px;overflow:auto;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+.badge.ok{background:rgba(34,197,94,.15);color:var(--ok)}
+.badge.off{background:rgba(239,68,68,.15);color:var(--danger)}
+pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-size:12px;margin:0}
+.muted{color:var(--muted);font-size:13px}
+.copy{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--bg2);padding:8px 10px;border-radius:8px;border:1px solid var(--border);word-break:break-all}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);padding:12px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(10px);transition:.25s;z-index:50}
+.toast.show{opacity:1;transform:none}
+.login{max-width:520px;margin:40px auto}
+.profile{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--card2);margin-bottom:8px}
+.profile .name{flex:1;font-weight:600}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:640px){
+  header{padding:12px 16px} main{padding:14px}
+  nav button{padding:6px 10px;font-size:12px}
+}
 </style>
 </head>
 <body>
-<header><h1>Gateway — OpenAI & Anthropic proxy</h1></header>
-<main>
-<div class="card">
+<header>
+  <h1>⚡ Gateway</h1>
   <div class="row">
-    <div style="flex:1">
-      <label>Client key</label>
-      <input id="clientKey" placeholder="Nhập client key để quản lý">
-    </div>
-    <div>
-      <button class="primary" onclick="saveKey()">Lưu</button>
+    <span class="pill" id="connPill">offline</span>
+    <button class="ghost sm" onclick="logout()">Đăng xuất</button>
+  </div>
+</header>
+<main>
+
+<!-- LOGIN -->
+<div id="loginView" class="login card">
+  <h2 style="margin-top:0">Đăng nhập</h2>
+  <p class="muted">Nhập client key để quản lý gateway. Có thể lưu nhiều profile để đăng nhập nhanh.</p>
+  <div class="grid">
+    <div><label>Base URL</label><input id="loginUrl" value=""></div>
+    <div><label>Client key</label><input id="loginKey" placeholder="uF9..."></div>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button class="primary" onclick="doLogin()">Đăng nhập</button>
+    <button class="ghost" onclick="saveProfile()">Lưu profile</button>
+  </div>
+  <div id="profilesBox" style="margin-top:16px"></div>
+  <p class="muted" style="margin-top:12px">Mẹo: mở URL <code>?key=YOUR_KEY</code> để tự đăng nhập.</p>
+</div>
+
+<!-- APP -->
+<div id="appView" style="display:none">
+  <nav>
+    <button onclick="show('dashboard')" id="tab-dashboard" class="active">Dashboard</button>
+    <button onclick="show('keys')" id="tab-keys">Keys</button>
+    <button onclick="show('models')" id="tab-models">Models</button>
+    <button onclick="show('logs')" id="tab-logs">Logs</button>
+    <button onclick="show('settings')" id="tab-settings">Settings</button>
+    <button onclick="show('config')" id="tab-config">Config</button>
+  </nav>
+
+  <div id="dashboard" class="section active">
+    <div class="grid grid-2">
+      <div class="card"><h3>Trạng thái</h3><pre id="statusBox">...</pre></div>
+      <div class="card"><h3>Thao tác nhanh</h3>
+        <div class="row">
+          <button class="ghost" onclick="loadStatus()">Refresh</button>
+        </div>
+        <p class="muted" style="margin-top:10px">Gateway chạy local. Port & host cấu hình trong Settings.</p>
+      </div>
     </div>
   </div>
-  <div id="statusLine" style="margin-top:8px;font-size:13px;color:#9aa0ad"></div>
-</div>
 
-<nav>
-  <button onclick="show('dashboard')" id="tab-dashboard" class="active">Dashboard</button>
-  <button onclick="show('keys')" id="tab-keys">Keys</button>
-  <button onclick="show('models')" id="tab-models">Models</button>
-  <button onclick="show('logs')" id="tab-logs">Logs</button>
-  <button onclick="show('settings')" id="tab-settings">Settings</button>
-</nav>
+  <div id="keys" class="section">
+    <div class="card">
+      <h3>Thêm API key upstream</h3>
+      <div class="grid grid-2">
+        <div><label>Provider</label>
+          <select id="newProvider"><option value="openai">openai</option><option value="anthropic">anthropic</option></select></div>
+        <div><label>Label</label><input id="newLabel" placeholder="label"></div>
+        <div><label>Key</label><input id="newKey" placeholder="sk-..."></div>
+        <div><label>Priority</label><input id="newPriority" type="number" value="0"></div>
+      </div>
+      <div style="margin-top:12px"><button class="primary" onclick="addKey()">Thêm key</button></div>
+    </div>
+    <div class="card"><h3>Danh sách keys</h3><div id="keysTable"></div></div>
+  </div>
 
-<div id="dashboard" class="section active">
-  <div class="card"><h3>Trạng thái</h3><pre id="statusBox">...</pre></div>
-</div>
+  <div id="models" class="section">
+    <div class="card"><h3>Models (chỉ enabled xuất hiện ở /v1/models)</h3><div id="modelsTable"></div></div>
+  </div>
 
-<div id="keys" class="section">
-  <div class="card">
-    <h3>Thêm API key upstream</h3>
-    <div class="row">
-      <div style="flex:1"><label>Provider</label>
-        <select id="newProvider"><option value="openai">openai</option><option value="anthropic">anthropic</option></select></div>
-      <div style="flex:2"><label>Label</label><input id="newLabel" placeholder="label"></div>
-      <div style="flex:3"><label>Key</label><input id="newKey" placeholder="sk-..."></div>
-      <div><button class="primary" onclick="addKey()">Thêm</button></div>
+  <div id="logs" class="section">
+    <div class="card"><h3>Recent logs</h3>
+      <div class="row"><button class="ghost" onclick="loadLogs()">Refresh</button><input id="logLimit" value="100" style="width:90px"></div>
+      <div id="logsTable" style="margin-top:12px"></div>
     </div>
   </div>
-  <div class="card"><h3>Danh sách keys</h3><div id="keysTable"></div></div>
-</div>
 
-<div id="models" class="section">
-  <div class="card"><h3>Models (chỉ enabled mới xuất hiện ở /v1/models)</h3><div id="modelsTable"></div></div>
-</div>
+  <div id="settings" class="section">
+    <div class="card"><h3>Settings</h3><div id="settingsForm"></div><div style="margin-top:12px"><button class="primary" onclick="saveSettings()">Lưu</button></div></div>
+    <div class="card"><h3>Client keys</h3>
+      <div class="row"><input id="newClientName" placeholder="name"><button class="primary" onclick="addClientKey()">Tạo client key</button></div>
+      <div id="clientKeysTable" style="margin-top:12px"></div>
+      <pre id="newClientKeyOut" style="margin-top:12px;display:none"></pre>
+    </div>
+  </div>
 
-<div id="logs" class="section">
-  <div class="card"><h3>Recent logs</h3><button onclick="loadLogs()">Refresh</button><div id="logsTable"></div></div>
-</div>
-
-<div id="settings" class="section">
-  <div class="card"><h3>Settings</h3><div id="settingsForm"></div><button class="primary" onclick="saveSettings()">Lưu</button></div>
-  <div class="card"><h3>Client keys</h3>
-    <div class="row"><input id="newClientName" placeholder="name"><button class="primary" onclick="addClientKey()">Tạo client key</button></div>
-    <div id="clientKeysTable"></div>
-    <pre id="newClientKeyOut"></pre>
+  <div id="config" class="section">
+    <div class="card">
+      <h3>Cấu hình cho ứng dụng</h3>
+      <p class="muted">Copy base URL và key vào app/script của bạn.</p>
+      <div class="grid">
+        <div><label>Base URL</label><div class="copy" id="cfgBase"></div></div>
+        <div><label>Client key</label><div class="copy" id="cfgKey"></div></div>
+        <div><label>OpenAI-compatible endpoint</label><div class="copy" id="cfgOpenAI"></div></div>
+        <div><label>Anthropic endpoint</label><div class="copy" id="cfgAnth"></div></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="ghost" onclick="copyText('cfgBase')">Copy Base URL</button>
+        <button class="ghost" onclick="copyText('cfgKey')">Copy Key</button>
+        <button class="ghost" onclick="copyText('cfgOpenAI')">Copy OpenAI URL</button>
+        <button class="ghost" onclick="copyText('cfgAnth')">Copy Anthropic URL</button>
+      </div>
+    </div>
   </div>
 </div>
-</main>
+
+<div id="toast" class="toast"></div>
 
 <script>
-const BASE = "";
-function key(){ return localStorage.getItem("gw_client_key") || document.getElementById("clientKey").value.trim(); }
-function saveKey(){ const v=document.getElementById("clientKey").value.trim(); localStorage.setItem("gw_client_key",v); document.getElementById("statusLine").textContent="Đã lưu client key."; refreshAll(); }
-function hdr(){ return {"Content-Type":"application/json","Authorization":"Bearer "+key()}; }
+const $ = (id)=>document.getElementById(id);
+let BASE_URL = location.origin;
+let CLIENT_KEY = "";
+
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
+function setConn(ok){ $("connPill").textContent = ok?"online":"offline"; $("connPill").style.color = ok?"var(--ok)":"var(--danger)"; }
+
+// profiles
+function getProfiles(){ try{return JSON.parse(localStorage.getItem("gw_profiles")||"[]")}catch{return []} }
+function setProfiles(p){ localStorage.setItem("gw_profiles",JSON.stringify(p)); }
+function renderProfiles(){
+  const box=$("profilesBox"); const ps=getProfiles();
+  if(!ps.length){ box.innerHTML="<p class='muted'>Chưa có profile nào.</p>"; return; }
+  box.innerHTML = ps.map((p,i)=>`
+    <div class="profile">
+      <div class="name">${p.name||"profile"}</div>
+      <div class="muted" style="font-size:11px">${p.url}</div>
+      <button class="ghost sm" onclick="quickLogin(${i})">Đăng nhập</button>
+      <button class="danger sm" onclick="delProfile(${i})">Xóa</button>
+    </div>`).join("");
+}
+function saveProfile(){
+  const url=$("loginUrl").value.trim()||location.origin;
+  const key=$("loginKey").value.trim();
+  if(!key){ toast("Nhập key"); return; }
+  const name = prompt("Tên profile:", "default")||"default";
+  const ps=getProfiles(); ps.push({name,url,key}); setProfiles(ps);
+  renderProfiles(); toast("Đã lưu profile");
+}
+function delProfile(i){ const ps=getProfiles(); ps.splice(i,1); setProfiles(ps); renderProfiles(); }
+function quickLogin(i){ const p=getProfiles()[i]; $("loginUrl").value=p.url; $("loginKey").value=p.key; doLogin(); }
+
+function doLogin(){
+  const url=$("loginUrl").value.trim()||location.origin;
+  const key=$("loginKey").value.trim();
+  if(!key){ toast("Nhập client key"); return; }
+  BASE_URL = url.replace(/\/$/,"");
+  CLIENT_KEY = key;
+  localStorage.setItem("gw_base_url", BASE_URL);
+  localStorage.setItem("gw_client_key", CLIENT_KEY);
+  // if base url different from current origin, we still call it
+  enterApp();
+}
+function logout(){ localStorage.removeItem("gw_client_key"); location.reload(); }
+
+function hdr(){ return {"Content-Type":"application/json","Authorization":"Bearer "+CLIENT_KEY}; }
+async function api(path, opts={}){
+  const r = await fetch(BASE_URL+path, {headers: hdr(), ...opts});
+  if(!r.ok){ const t=await r.text(); throw new Error(r.status+" "+t); }
+  return r.json();
+}
+
 function show(id){
   document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
@@ -103,93 +227,127 @@ function show(id){
   if(id==="models") loadModels();
   if(id==="logs") loadLogs();
   if(id==="settings") loadSettings();
+  if(id==="config") loadConfig();
 }
-async function api(path, opts={}){
-  const r = await fetch(BASE+path, {headers: hdr(), ...opts});
-  if(!r.ok){ const t=await r.text(); throw new Error(r.status+" "+t); }
-  return r.json();
-}
+
 async function loadStatus(){
-  try{
-    const s = await api("/gateway/status");
-    document.getElementById("statusBox").textContent = JSON.stringify(s,null,2);
-  }catch(e){ document.getElementById("statusBox").textContent = e.message; }
+  try{ const s=await api("/gateway/status"); $("statusBox").textContent=JSON.stringify(s,null,2); setConn(true);}
+  catch(e){ $("statusBox").textContent=e.message; setConn(false);}
 }
 async function loadKeys(){
   try{
-    const d = await api("/gateway/keys");
+    const d=await api("/gateway/keys");
     let html="<table><tr><th>Provider</th><th>Label</th><th>Prefix</th><th>Enabled</th><th>Failures</th><th></th></tr>";
     for(const k of d.keys){
-      html += `<tr><td>${k.provider}</td><td>${k.label}</td><td>${k.key_prefix}</td><td>${k.enabled}</td><td>${k.failure_count}</td><td><button class="danger" onclick="delKey('${k.id}')">Xóa</button></td></tr>`;
+      html += `<tr><td>${k.provider}</td><td>${k.label}</td><td>${k.key_prefix}</td><td><span class="badge ${k.enabled?'ok':'off'}">${k.enabled}</span></td><td>${k.failure_count}</td><td><button class="danger sm" onclick="delKey('${k.id}')">Xóa</button></td></tr>`;
     }
     html+="</table>";
-    document.getElementById("keysTable").innerHTML=html;
-  }catch(e){ document.getElementById("keysTable").innerHTML=e.message; }
+    $("keysTable").innerHTML=html;
+  }catch(e){ $("keysTable").innerHTML=e.message; }
 }
 async function addKey(){
-  const body={provider:document.getElementById("newProvider").value,label:document.getElementById("newLabel").value,key:document.getElementById("newKey").value};
+  const body={provider:$("newProvider").value,label:$("newLabel").value,key:$("newKey").value,priority:parseInt($("newPriority").value||"0")};
   await api("/gateway/keys",{method:"POST",body:JSON.stringify(body)});
-  document.getElementById("newLabel").value=""; document.getElementById("newKey").value="";
-  loadKeys();
+  $("newLabel").value=""; $("newKey").value="";
+  toast("Đã thêm key"); loadKeys();
 }
-async function delKey(id){ await api("/gateway/keys/"+id,{method:"DELETE"}); loadKeys(); }
+async function delKey(id){ await api("/gateway/keys/"+id,{method:"DELETE"}); toast("Đã xóa"); loadKeys(); }
 async function loadModels(){
   try{
-    const d = await api("/gateway/models");
+    const d=await api("/gateway/models");
     let html="<table><tr><th>ID</th><th>Provider</th><th>Display</th><th>Enabled</th><th></th></tr>";
     for(const m of d.models){
-      html += `<tr><td>${m.id}</td><td>${m.provider}</td><td>${m.display_name}</td><td>${m.enabled}</td><td><button onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?'Tắt':'Bật'}</button></td></tr>`;
+      html += `<tr><td>${m.id}</td><td>${m.provider}</td><td>${m.display_name}</td><td><span class="badge ${m.enabled?'ok':'off'}">${m.enabled}</span></td><td><button class="ghost sm" onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?'Tắt':'Bật'}</button></td></tr>`;
     }
     html+="</table>";
-    document.getElementById("modelsTable").innerHTML=html;
-  }catch(e){ document.getElementById("modelsTable").innerHTML=e.message; }
+    $("modelsTable").innerHTML=html;
+  }catch(e){ $("modelsTable").innerHTML=e.message; }
 }
 async function toggleModel(id,enabled){ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); }
 async function loadLogs(){
   try{
-    const d = await api("/gateway/logs?limit=100");
+    const limit=$("logLimit").value||100;
+    const d=await api("/gateway/logs?limit="+limit);
     let html="<table><tr><th>Time</th><th>Provider</th><th>Model</th><th>Status</th><th>Latency</th><th>Stream</th></tr>";
     for(const l of d.logs){
       html += `<tr><td>${new Date(l.timestamp*1000).toLocaleTimeString()}</td><td>${l.provider||''}</td><td>${l.model||''}</td><td>${l.status_code}</td><td>${l.latency_ms}ms</td><td>${l.stream}</td></tr>`;
     }
     html+="</table>";
-    document.getElementById("logsTable").innerHTML=html;
-  }catch(e){ document.getElementById("logsTable").innerHTML=e.message; }
+    $("logsTable").innerHTML=html;
+  }catch(e){ $("logsTable").innerHTML=e.message; }
 }
 async function loadSettings(){
   try{
-    const d = await api("/gateway/settings");
-    const s = d.settings;
+    const d=await api("/gateway/settings");
+    const s=d.settings;
     let html="";
     for(const [k,v] of Object.entries(s)){
       html += `<div style="margin-bottom:8px"><label>${k}</label><input name="${k}" value="${v}"></div>`;
     }
-    document.getElementById("settingsForm").innerHTML=html;
-    // client keys
-    const ck = await api("/gateway/client-keys");
+    $("settingsForm").innerHTML=html;
+    const ck=await api("/gateway/client-keys");
     let ckh="<table><tr><th>Name</th><th>Enabled</th><th>Created</th><th></th></tr>";
     for(const k of ck.client_keys){
-      ckh += `<tr><td>${k.name}</td><td>${k.enabled}</td><td>${new Date(k.created_at*1000).toLocaleString()}</td><td><button class="danger" onclick="delClientKey('${k.id}')">Xóa</button></td></tr>`;
+      ckh += `<tr><td>${k.name}</td><td>${k.enabled}</td><td>${new Date(k.created_at*1000).toLocaleString()}</td><td><button class="danger sm" onclick="delClientKey('${k.id}')">Xóa</button></td></tr>`;
     }
     ckh+="</table>";
-    document.getElementById("clientKeysTable").innerHTML=ckh;
-  }catch(e){ document.getElementById("settingsForm").innerHTML=e.message; }
+    $("clientKeysTable").innerHTML=ckh;
+  }catch(e){ $("settingsForm").innerHTML=e.message; }
 }
 async function saveSettings(){
-  const inputs = document.querySelectorAll("#settingsForm input");
-  const obj={};
-  inputs.forEach(i=>{ obj[i.name]=i.value; });
+  const inputs=document.querySelectorAll("#settingsForm input");
+  const obj={}; inputs.forEach(i=>{obj[i.name]=i.value;});
   await api("/gateway/settings",{method:"POST",body:JSON.stringify(obj)});
-  alert("Đã lưu");
+  toast("Đã lưu settings");
 }
 async function addClientKey(){
-  const name=document.getElementById("newClientName").value.trim()||"default";
+  const name=$("newClientName").value.trim()||"default";
   const d=await api("/gateway/client-keys",{method:"POST",body:JSON.stringify({name})});
-  document.getElementById("newClientKeyOut").textContent="NEW KEY (copy now): "+d.key;
+  const out=$("newClientKeyOut"); out.style.display="block"; out.textContent="NEW KEY (copy ngay): "+d.key;
+  toast("Đã tạo client key");
 }
-async function delClientKey(id){ await api("/gateway/client-keys/"+id,{method:"DELETE"}); loadSettings(); }
-function refreshAll(){ loadStatus(); }
-window.onload=()=>{ const k=localStorage.getItem("gw_client_key"); if(k) document.getElementById("clientKey").value=k; loadStatus(); };
+async function delClientKey(id){ await api("/gateway/client-keys/"+id,{method:"DELETE"}); toast("Đã xóa"); loadSettings(); }
+
+function loadConfig(){
+  $("cfgBase").textContent=BASE_URL;
+  $("cfgKey").textContent=CLIENT_KEY;
+  $("cfgOpenAI").textContent=BASE_URL+"/v1";
+  $("cfgAnth").textContent=BASE_URL+"/v1";
+}
+function copyText(id){
+  const t=$(id).textContent;
+  navigator.clipboard.writeText(t).then(()=>toast("Đã copy")).catch(()=>toast("Copy thất bại"));
+}
+
+function enterApp(){
+  $("loginView").style.display="none";
+  $("appView").style.display="block";
+  $("loginUrl").value=BASE_URL;
+  $("loginKey").value=CLIENT_KEY;
+  loadStatus(); loadConfig();
+  setConn(true);
+}
+
+// auto login from URL ?key=
+(function(){
+  const u=new URL(location.href);
+  const k=u.searchParams.get("key");
+  if(k){
+    CLIENT_KEY=k;
+    BASE_URL=u.origin;
+    localStorage.setItem("gw_client_key",CLIENT_KEY);
+    localStorage.setItem("gw_base_url",BASE_URL);
+    u.searchParams.delete("key");
+    history.replaceState({}, "", u.toString());
+  } else {
+    CLIENT_KEY=localStorage.getItem("gw_client_key")||"";
+    BASE_URL=localStorage.getItem("gw_base_url")||location.origin;
+  }
+  $("loginUrl").value=BASE_URL;
+  $("loginKey").value=CLIENT_KEY;
+  renderProfiles();
+  if(CLIENT_KEY){ enterApp(); }
+})();
 </script>
 </body>
 </html>
