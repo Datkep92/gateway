@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>wiki.qaq.gateway</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@PREFIX@/bin/sh</string>
+    <string>@PREFIX@/usr/bin/gateway-supervise</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway</string>
+  <key>UserName</key>
+  <string>mobile</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@PREFIX@/usr/bin:@PREFIX@/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key>
+    <string>/var/mobile</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway/run.log</string>
+  <key>StandardErrorPath</key>
+  <string>/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway/run.log</string>
+</dict>
+</plist>

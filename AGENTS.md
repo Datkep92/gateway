@@ -39,6 +39,14 @@ python3 Tests/live_ui_test.py         # chạy chính mã giao diện trong node
 - `db.init_db()` phải chạy trước `db.set_setting` (không thì lỗi `no such table: settings`).
 - `data/` và `run.log` nằm ngoài git (`.gitignore`).
 
+## Gói cài đặt & công tắc bật/tắt
+- Nguồn nằm trong `packaging/`: `daemon.plist.in`, `gateway-supervise.in`, `gatewayctl`, `postinst`, `prerm`; `apelin/build.sh` thay `@PREFIX@` rồi gói bằng `dpkg-deb -b --root-owner-group`. Build bằng `apelin_project_build`, cài bằng `apelin_package_install` (mã gói `wiki.qaq.gateway`, rootless, chỉ chứa plist + script trong `/var/jb`, không chứa mã dự án).
+- **Trên máy này launchd KHÔNG chạy thẳng một script**: đặt script làm `ProgramArguments[0]` thì dịch vụ nạp được nhưng chết ngay (`last exit code = 78: EX_CONFIG`, `state = spawn scheduled`). Phải gọi qua shell: `["@PREFIX@/bin/sh", "@PREFIX@/usr/bin/gateway-supervise"]` — giống `com.ofm.watchdog.plist`.
+- `gateway-supervise` chạy vòng lặp: có `data/paused` → `paused.py` (trang "Bật cổng" ở **đúng cổng** đang dùng), không thì `main.py`. Dịch vụ: `UserName mobile`, `RunAtLoad` + `KeepAlive`, log vào `run.log` của dự án.
+- Công tắc: nút **Tắt cổng** trong giao diện gọi `POST /gateway/off` (**cần client key**, chỉ loopback không đủ); lệnh `gatewayctl on|off|restart|status|pid`. `gatewayctl off` phải **dừng tiến trình** (không chỉ ghi cờ) thì bộ giám sát mới chuyển sang trang bật lại. Trang tắt gọi `POST /on` **không cần key**.
+- Khi đang tắt: trang chủ trả 200 kèm nút "Bật cổng", `/v1/*` trả 503. Muốn kiểm nhanh: `gatewayctl status`.
+- Chưa kiểm: tự mở lại sau khi khởi động máy (chưa reboot lại máy từ lúc cài).
+
 ## Ghi nhớ khi làm việc
 - Việc đang dở ghi vào ghi nhớ `handoff` (phạm vi project) theo skill `sep-working-rules`.
 - Sửa giao diện thì nêu rõ phần nào **chưa** nhìn thấy trên màn hình (bố cục/màu) để người dùng tự xem.

@@ -506,6 +506,15 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
         <div class="savebar show" id="settingsSave"><button class="btn primary block" onclick="saveSettings()">💾 Lưu cài đặt</button></div>
 
         <div class="card">
+          <h3>⏻ Công tắc cổng</h3>
+          <p class="hint" style="margin-top:0">Tắt thì API ngừng nhận yêu cầu (trả lỗi 503). Cổng vẫn mở một trang nhỏ ở đúng địa chỉ này để bật lại — không cần máy tính hay dòng lệnh.</p>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn" onclick="gatewayOff()">⏻ Tắt cổng</button>
+          </div>
+          <div id="powerMsg" style="margin-top:12px"></div>
+        </div>
+
+        <div class="card">
           <h3>💾 Sao lưu &amp; khôi phục</h3>
           <p class="hint" style="margin-top:0">File sao lưu chứa toàn bộ cài đặt, API key và client key. Giữ kín như mật khẩu.</p>
           <div class="actions" style="margin-top:10px">
@@ -941,6 +950,22 @@ async function api(path,opts){
   const r = await fetch(BASE_URL+path, Object.assign({headers:hdr()},opts||{}));
   if(!r.ok){ let t=""; try{t=await r.text()}catch(e){}; const e=new Error(r.status+" "+t); e.status=r.status; throw e; }
   return r.json();
+}
+
+/* ---------- công tắc cổng ---------- */
+async function gatewayOff(){
+  if(!confirm("Tắt cổng? API sẽ ngừng nhận yêu cầu cho tới khi bạn bật lại bằng trang hiện ra ngay sau đó.")) return;
+  const m=$("powerMsg");
+  if(m) m.textContent="Đang tắt…";
+  try{
+    await api("/gateway/off",{method:"POST"});
+  }catch(e){
+    if(m) m.textContent="Không tắt được: "+(e.message||e);
+    return;
+  }
+  document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font:16px/1.6 -apple-system,system-ui,sans-serif;background:#0b1020;color:#e7ecff">'
+    + '<div><div style="font-size:40px">⏻</div><h2 style="margin:12px 0 6px">Đã tắt cổng</h2><p style="color:#9aa8ce">Đang mở trang bật lại…</p></div></div>';
+  setTimeout(function(){ location.replace("/"); }, 1500);
 }
 
 /* ---------- navigation ---------- */

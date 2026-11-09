@@ -1,0 +1,15 @@
+#!/bin/sh
+# chạy trước khi gỡ: dừng dịch vụ nền Gateway
+set -e
+
+JB="/var/jb"
+[ -d "$JB" ] || JB=""
+LBL="wiki.qaq.gateway"
+LC="$JB/usr/bin/launchctl"
+[ -x "$LC" ] || LC="/bin/launchctl"
+
+"$LC" bootout "system/$LBL" 2>/dev/null || true
+"$LC" bootout "user/$(id -u)/$LBL" 2>/dev/null || true
+pkill -f "Projects/Gateway/main.py" 2>/dev/null || true
+
+exit 0

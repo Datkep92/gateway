@@ -1,1 +1,1 @@
-{"autoName":false,"buildSystem":"external","displayName":"Gateway","kind":"workspace","projectID":"1c62d01e-cd55-472a-8701-f89fcef18fca","schemaVersion":1}
+{"autoName":false,"buildSystem":"external","displayName":"Gateway","external":{"script":"apelin/build.sh","interpreter":"sh","arguments":[]},"kind":"workspace","projectID":"1c62d01e-cd55-472a-8701-f89fcef18fca","schemaVersion":1}

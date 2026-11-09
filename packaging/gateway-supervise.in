@@ -1,0 +1,21 @@
+#!/bin/sh
+# Bộ giám sát: chạy main.py; khi có cờ data/paused thì chạy paused.py (trang bật lại).
+PROJ="/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway"
+PY="@PREFIX@/usr/bin/python3"
+[ -x "$PY" ] || PY="python3"
+
+case "${1:-run}" in
+    run) ;;
+    *)  echo "dùng: gateway-supervise"; exit 2 ;;
+esac
+
+cd "$PROJ" || exit 1
+
+while :; do
+    if [ -f "$PROJ/data/paused" ]; then
+        "$PY" -u "$PROJ/paused.py"
+    else
+        "$PY" -u "$PROJ/main.py"
+    fi
+    sleep 1
+done

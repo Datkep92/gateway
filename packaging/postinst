@@ -1,0 +1,26 @@
+#!/bin/sh
+# chạy sau khi cài: nạp dịch vụ nền Gateway
+set -e
+
+JB="/var/jb"
+[ -d "$JB" ] || JB=""
+LBL="wiki.qaq.gateway"
+PLIST="$JB/Library/LaunchDaemons/$LBL.plist"
+LC="$JB/usr/bin/launchctl"
+[ -x "$LC" ] || LC="/bin/launchctl"
+
+# dừng bản chạy tay (screen) để nhường cổng
+pkill -f "Projects/Gateway/main.py" 2>/dev/null || true
+pkill -f "python3 main.py" 2>/dev/null || true
+
+"$LC" bootout "system/$LBL" 2>/dev/null || true
+"$LC" bootout "user/$(id -u)/$LBL" 2>/dev/null || true
+
+if "$LC" bootstrap system "$PLIST" 2>/dev/null; then
+    "$LC" kickstart -k "system/$LBL" 2>/dev/null || true
+else
+    "$LC" bootstrap "user/$(id -u)" "$PLIST" 2>/dev/null || true
+    "$LC" kickstart -k "user/$(id -u)/$LBL" 2>/dev/null || true
+fi
+
+exit 0

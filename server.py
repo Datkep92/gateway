@@ -8,6 +8,8 @@ START_TIME = time.time()
 # địa chỉ tiến trình này đang nghe: để biết nhập file xong có phải khởi động lại không
 LISTEN = {"host": None, "port": None, "tls": False}
 MAX_IMPORT_BYTES = 4 * 1024 * 1024
+# Cờ "cổng đang tắt": bộ giám sát thấy file này thì chạy paused.py thay vì main.py
+PAUSE_FLAG = os.path.join(db.DATA_DIR, "paused")
 
 def json_response(handler, status, obj, headers=None):
     data = json.dumps(obj).encode()
@@ -718,6 +720,17 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                                   "port": port, "tls_enabled": tls})
         threading.Timer(0.6, reexec_process).start()
 
+    def _gateway_off(self):
+        """Tắt cổng: ghi cờ rồi thoát, bộ giám sát sẽ dựng trang bật lại."""
+        try:
+            with open(PAUSE_FLAG, "w") as f:
+                f.write(str(int(time.time())))
+        except OSError as e:
+            json_response(self, 500, {"error": {"message": "không tắt được: %s" % e}})
+            return
+        json_response(self, 200, {"ok": True, "paused": True})
+        threading.Timer(0.6, lambda: os._exit(0)).start()
+
     # ---- gateway management ----
     def _require_mgmt_auth(self):
         cid = db.validate_client_key(extract_key(self.headers))
@@ -795,6 +808,9 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/gateway/restart":
             self._gateway_restart()
+            return
+        if path == "/gateway/off":
+            self._gateway_off()
             return
         body = read_body(self)
         try:
