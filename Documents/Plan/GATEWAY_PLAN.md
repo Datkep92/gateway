@@ -14,7 +14,7 @@
 - **Client auth**: có API key riêng cho gateway (client phải gửi key).
 - **Port mặc định**: `151199`.
 - **Key rotation**: xoay key khi gặp **bất cứ lỗi nào** (error-based rotation).
-- **Model listing**: chỉ hiển thị model **enabled** (đang hoạt động).
+- **7 điểm mở**: đã chốt → xem §18 (Hummingbird, GRDB, LAN opt-in, log body opt-in, token bucket rate limit, TLS opt-in, tool calling passthrough).
 
 ---
 
@@ -35,10 +35,10 @@
 - Key pool + rotation on error.
 - Persistence (SwiftData/Core Data + Keychain).
 - Background mode tuỳ chọn.
-- Log request/response (metadata, không body nhạy cảm mặc định).
+- Log request/response: metadata mặc định; **không log body** mặc định. Tuỳ chọn **debug log body** (tắt mặc định) với cảnh báo bảo mật rõ ràng; khi bật, body được redact theo policy (API key, token) và lưu có TTL ngắn.
 
 ### Out-of-scope v1
-- Tool/function calling đầy đủ (có thể v1.1).
+- Tool/function calling: passthrough OpenAI `tools`/`tool_calls` (v1); Anthropic `tools` map cơ bản (v1); đầy đủ (parallel tool calls, tool result loop) ở v1.1.
 - Vision/multimodal (v1.1).
 - Billing/usage metering chi tiết.
 - Multi-user / remote access qua tunnel.
@@ -86,9 +86,9 @@
 ### Stack đề xuất
 - **Ngôn ngữ**: Swift 5.9+ (iOS 16+ để khớp thiết bị).
 - **UI**: SwiftUI.
-- **HTTP server**: Hummingbird 2 (nhẹ, async/await, SSE support) — ưu tiên; Vapor nếu cần middleware phong phú.
+- **HTTP server**: **Hummingbird 2** (đã chốt) — nhẹ, async/await, SSE support. Không dùng Vapor.
 - **Networking upstream**: URLSession (async) + AsyncStream cho SSE.
-- **Persistence**: SwiftData (iOS 17) hoặc Core Data (iOS 16). Vì thiết bị iOS 16.6 → dùng Core Data hoặc GRDB để tương thích. Khuyến nghị: **GRDB.swift** (SQLite, lightweight) hoặc Core Data. Tôi đề xuất **SwiftData với fallback iOS 17+**? Thiết bị là iOS 16.6 → cần hỗ trợ 16.x → dùng **Core Data** hoặc **GRDB**. Đề xuất **GRDB.swift** (đơn giản, migration dễ).
+- **Persistence**: **GRDB.swift + SQLite** (đã chốt) — tương thích iOS 16+, migration dễ, lightweight.
 - **Keychain**: Security framework / KeychainAccess.
 - **Background**: `BGTaskScheduler` + `UIApplication` background task; Network Extension không cần.
 - **Logging**: os.Logger + in-memory ring buffer cho UI.
@@ -290,7 +290,7 @@ attempt 1: selectKey → call upstream
 - Access: `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
 
 ### 9.3 Preferences (UserDefaults)
-- port, backgroundEnabled, clientKeyRequired, logRetentionDays, maxLogCount, corsEnabled, lanEnabled.
+- port, backgroundEnabled, clientKeyRequired, logRetentionDays, maxLogCount, corsEnabled, lanEnabled, logBodyEnabled (default false, cảnh báo bảo mật), tlsEnabled, tlsMode (self-signed/imported), rateLimitEnabled, rateLimitRpm, rateLimitBurst.
 
 ---
 
@@ -326,7 +326,7 @@ attempt 1: selectKey → call upstream
 - Không dùng VoIP/background location (vi phạm App Store).
 
 ### 11.3 Network
-- Bind `0.0.0.0:port` nếu lanEnabled else `127.0.0.1`.
+- Bind mặc định `127.0.0.1:port` (localhost only). Tuỳ chọn **LAN access**: bind `0.0.0.0:port` khi `lanEnabled = true` (tắt mặc định). Bật LAN → cảnh báo bảo mật (expose ra mạng LAN). Management endpoints luôn chỉ loopback dù LAN bật.
 
 ---
 
@@ -334,10 +334,10 @@ attempt 1: selectKey → call upstream
 
 - Client key bắt buộc (không có anonymous mode trong v1) → mọi request phải có key hợp lệ.
 - Key hash bằng SHA-256 + salt (hoặc bcrypt nếu thư viện).
-- Rate limit per client key (optional, default 60 req/min).
+- Rate limit per client key: **token bucket**, cấu hình được (default 60 req/min, burst 10), trả 429 + `Retry-After`.
 - Management endpoints chỉ loopback (127.0.0.1) + valid client key.
 - Không log API key plaintext; redact trong logs (chỉ prefix 4 ký tự).
-- TLS: v1 không (local HTTP). v1.1 có thể self-signed cert.
+- TLS: mặc định **không TLS** (local HTTP). Tuỳ chọn HTTPS với cert tự ký (auto-generate) hoặc nhập cert người dùng (PEM/P12); bật qua Settings. ATS allow local network.
 - App Transport Security: allow local network.
 - Data protection: NSFileProtectionComplete.
 
@@ -434,16 +434,29 @@ Gateway/
 
 ---
 
-## 18. Việc cần quyết định thêm (chờ user)
+## 18. Quyết định đã chốt (7 điểm mở) — tự quyết định
 
-1. HTTP framework: Hummingbird 2 vs Vapor?
-2. Persistence: GRDB vs Core Data vs SwiftData (iOS 17 only)?
-3. Có hỗ trợ LAN access (0.0.0.0) hay chỉ loopback?
-4. Log body (redacted) hay chỉ metadata?
-5. Rate limit per client key?
-6. Có cần TLS local (self-signed) cho v1?
-7. Có cần tool/function calling ở v1?
+1. **HTTP framework**: **Hummingbird 2**.
+   - *Lý do*: nhẹ, async/await native, SSE support tốt, phù hợp iOS app; Vapor nặng và middleware không cần thiết cho scope v1.
 
----
+2. **Persistence**: **GRDB.swift + SQLite**.
+   - *Lý do*: tương thích iOS 16.6 (SwiftData chỉ iOS 17+), migration versioning rõ ràng, lightweight, không phụ thuộc Core Data stack; Keychain vẫn cho secret.
+
+3. **LAN access**: mặc định **localhost only** (`127.0.0.1`); tuỳ chọn bind `0.0.0.0` qua `lanEnabled` (tắt mặc định).
+   - *Lý do*: mặc định an toàn (chỉ máy này); LAN là opt-in có cảnh báo; management endpoints luôn loopback.
+
+4. **Log body**: mặc định **không log body**; tuỳ chọn **debug log body** (tắt mặc định) với cảnh báo bảo mật.
+   - *Lý do*: tránh leak dữ liệu nhạy cảm; debug mode redact secret, TTL ngắn, opt-in rõ ràng.
+
+5. **Rate limit**: **token bucket** theo client key, cấu hình được (default 60 req/min, burst 10), trả 429 + `Retry-After`.
+   - *Lý do*: linh hoạt, bảo vệ upstream khỏi abuse, cấu hình được per deployment; token bucket xử lý burst tốt hơn fixed window.
+
+6. **TLS**: mặc định **không TLS** (local HTTP); tuỳ chọn HTTPS với cert tự ký (auto-generate) hoặc nhập cert (PEM/P12) qua Settings.
+   - *Lý do*: local traffic không cần TLS; HTTPS là opt-in cho môi trường cần (reverse proxy/tunnel); tự ký đủ cho local trust.
+
+7. **Tool calling**: **passthrough OpenAI tools** (`tools`/`tool_calls`) ở v1; Anthropic `tools` map cơ bản ở v1; đầy đủ (parallel tool calls, tool result loop) ở v1.1.
+   - *Lý do*: passthrough đơn giản, không cần xử lý tool execution phía gateway; Anthropic map cơ bản để tương thích client; đầy đủ hoãn v1.1.
+
+> Tất cả lựa chọn trên đã phản ánh vào các section liên quan (3, 9, 11, 12, scope v1). Không còn điểm mở.
 
 *Kế hoạch này chưa là code. Khi user đồng ý, bắt đầu với v0.1.*
