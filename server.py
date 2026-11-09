@@ -1,10 +1,13 @@
-import http.server, socketserver, threading, time, json, os, urllib.parse, ssl, socket
+import http.server, socketserver, threading, time, json, os, urllib.parse, ssl, socket, sys
 
 import db, keypool, proxy, rate_limit, providers, translate
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 START_TIME = time.time()
+# địa chỉ tiến trình này đang nghe: để biết nhập file xong có phải khởi động lại không
+LISTEN = {"host": None, "port": None, "tls": False}
+MAX_IMPORT_BYTES = 4 * 1024 * 1024
 
 def json_response(handler, status, obj, headers=None):
     data = json.dumps(obj).encode()
@@ -130,6 +133,9 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 return
             if path == "/gateway/onboard":
                 self._gateway_onboard()
+                return
+            if path == "/gateway/config/import":
+                self._gateway_config_import()
                 return
             if path.startswith("/gateway/"):
                 self._gateway_post(path)
@@ -651,6 +657,67 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
         })
 
 
+    # ---- sao lưu / khôi phục toàn bộ cấu hình ----
+    def _gateway_config_export(self):
+        key = extract_key(self.headers)
+        data = db.export_config(client_key=key if (key and db.validate_client_key(key)) else None)
+        body = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
+        name = "gateway-backup-%s.json" % time.strftime("%Y%m%d-%H%M%S")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Disposition", 'attachment; filename="%s"' % name)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        handle_cors(self)
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
+
+    def _gateway_config_import(self):
+        """Nhập file sao lưu: thay toàn bộ cấu hình và trả key để vào ngay."""
+        if not self._setup_allowed():
+            json_response(self, 403, {"error":{
+                "message":"chi nhap duoc tu chinh may nay hoac voi client key hop le",
+                "type":"forbidden"}})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+        except (TypeError, ValueError):
+            length = 0
+        if length > MAX_IMPORT_BYTES:
+            json_response(self, 413, {"error":{"message":"file sao luu qua lon",
+                                               "type":"invalid_request"}})
+            return
+        body = read_body(self)
+        try:
+            data = json.loads(body.decode("utf-8") or "{}")
+        except Exception:
+            json_response(self, 400, {"error":{"message":"file khong doc duoc (JSON loi)",
+                                               "type":"invalid_request"}})
+            return
+        try:
+            res = db.import_config(data, keep_client_key=extract_key(self.headers))
+        except db.BackupError as e:
+            json_response(self, 400, {"error":{"message":str(e),"type":"invalid_request"}})
+            return
+        except Exception as e:
+            json_response(self, 500, {"error":{"message":"nhap that bai: %s" % e,
+                                               "type":"server_error"}})
+            return
+        host, port, tls = listen_target()
+        res.update({"ok": True, "host": host, "port": port, "tls_enabled": tls,
+                    "restart_needed": restart_needed(host, port, tls)})
+        json_response(self, 200, res)
+
+    def _gateway_restart(self):
+        """Khởi động lại chính tiến trình này để nạp host/port/TLS vừa nhập."""
+        host, port, tls = listen_target()
+        json_response(self, 200, {"ok": True, "restarting": True, "host": host,
+                                  "port": port, "tls_enabled": tls})
+        threading.Timer(0.6, reexec_process).start()
+
     # ---- gateway management ----
     def _require_mgmt_auth(self):
         cid = db.validate_client_key(extract_key(self.headers))
@@ -666,6 +733,9 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
     def _gateway_get(self, path, parsed):
         cid = self._require_mgmt_auth()
         if cid is None:
+            return
+        if path == "/gateway/config/export":
+            self._gateway_config_export()
             return
         qs = urllib.parse.parse_qs(parsed.query)
         if path == "/gateway/status":
@@ -722,6 +792,9 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
     def _gateway_post(self, path):
         cid = self._require_mgmt_auth()
         if cid is None:
+            return
+        if path == "/gateway/restart":
+            self._gateway_restart()
             return
         body = read_body(self)
         try:
@@ -827,12 +900,48 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+# ---- địa chỉ theo cài đặt: dùng cho nhập file và khởi động lại ----
+def listen_target():
+    """Địa chỉ mà main.py sẽ nghe theo cài đặt hiện tại. -> (host, port, tls)"""
+    host = db.get_setting("host", "127.0.0.1") or "127.0.0.1"
+    if db.get_setting("lan_enabled", "0") == "1":
+        host = "0.0.0.0"
+    try:
+        port = int(db.get_setting("port", "15199"))
+    except (TypeError, ValueError):
+        port = 15199
+    if not (0 <= port <= 65535):
+        port = 15199
+    return host, port, db.get_setting("tls_enabled", "0") == "1"
+
+def restart_needed(host=None, port=None, tls=None):
+    """Nhập file xong có phải khởi động lại mới đúng địa chỉ không."""
+    if LISTEN["port"] is None:
+        return False
+    host, port, tls = listen_target() if host is None else (host, port, tls)
+    return bool(LISTEN["port"] != port or LISTEN["host"] != host or bool(LISTEN["tls"]) != bool(tls))
+
+def reexec_process():
+    """Thay chính tiến trình này bằng một tiến trình mới (giữ nguyên session screen)."""
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    argv0 = (str(sys.argv[0]) if sys.argv and str(sys.argv[0]).endswith(".py")
+             else os.path.join(BASE_DIR, "main.py"))
+    try:
+        os.execv(sys.executable, [sys.executable, os.path.abspath(argv0)] + list(sys.argv[1:]))
+    except Exception:
+        os._exit(3)
+
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
 def make_server(host, port, use_tls=False, certfile=None, keyfile=None):
     httpd = ThreadedHTTPServer((host, port), GatewayHandler)
+    LISTEN.update({"host": host, "port": port, "tls": bool(use_tls)})
     if use_tls:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(certfile, keyfile)

@@ -316,6 +316,7 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
       <div><label>Client key</label><input id="loginKey" placeholder="dán client key…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
       <button class="btn primary block" onclick="doLogin()">Đăng nhập</button>
       <button class="btn block" onclick="openSetup()">⚡ Thiết lập một bước (máy chưa có key)</button>
+      <button class="btn block" onclick="pickBackupFile()">📥 Nhập file sao lưu (máy mới)</button>
       <div class="actions">
         <button class="btn" onclick="saveProfile()">＋ Lưu profile</button>
         <button class="btn" onclick="clearKey()">Xóa key đã lưu</button>
@@ -383,6 +384,22 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
     </div>
 
     <div id="setupDone" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ============ NHẬP FILE SAO LƯU ============ -->
+<div id="backupSheet" class="sheetwrap" role="dialog" aria-modal="true" aria-label="Nhập file sao lưu">
+  <div class="veil" onclick="closeBackupSheet()"></div>
+  <div class="sheet">
+    <div class="sheethead">
+      <div style="flex:1;min-width:0">
+        <h2>📥 Nhập file sao lưu</h2>
+        <p id="backupSub">Chọn file .json đã xuất từ Gateway để khôi phục toàn bộ cấu hình.</p>
+      </div>
+      <button class="iconbtn" onclick="closeBackupSheet()" aria-label="Đóng">✕</button>
+    </div>
+    <div id="backupResult"></div>
+    <button class="btn block" style="margin-top:12px" onclick="pickBackupFile()">📂 Chọn file khác</button>
   </div>
 </div>
 
@@ -489,6 +506,17 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
         <div class="savebar show" id="settingsSave"><button class="btn primary block" onclick="saveSettings()">💾 Lưu cài đặt</button></div>
 
         <div class="card">
+          <h3>💾 Sao lưu &amp; khôi phục</h3>
+          <p class="hint" style="margin-top:0">File sao lưu chứa toàn bộ cài đặt, API key và client key. Giữ kín như mật khẩu.</p>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn primary" onclick="exportBackup()">⬇️ Xuất file sao lưu</button>
+            <button class="btn" onclick="pickBackupFile()">📥 Nhập từ file</button>
+          </div>
+          <div id="backupMsg" style="margin-top:12px"></div>
+          <p class="hint">Nhập file sẽ <b>thay toàn bộ</b> cấu hình trên máy này. Máy mới chỉ cần mở trang này → Nhập từ file → tự vào bảng điều khiển, không phải làm gì thêm.</p>
+        </div>
+
+        <div class="card">
           <h3>🔐 Client keys <span class="tag" id="clientCount"></span></h3>
           <div class="grid2">
             <div><label>Tên key mới</label><input id="newClientName" placeholder="ví dụ: iPhone"></div>
@@ -532,6 +560,7 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
 </div>
 
 <div id="toast" class="toast"></div>
+<input id="backupFile" type="file" accept=".json,application/json" style="display:none" onchange="importBackupPicked()">
 
 <script>
 const $ = (id)=>document.getElementById(id);
@@ -752,6 +781,147 @@ function finishSetup(){
   closeSetup();
   doLogin();
   toast("Đã thiết lập xong");
+}
+
+/* ---------- sao lưu & khôi phục ---------- */
+const BACKUP_MIME = "application/json";
+function stamp(){
+  const d=new Date(), p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes());
+}
+function pickBackupFile(){ const el=$("backupFile"); if(!el) return; el.value=""; el.click(); }
+function boxHtml(kind,html){
+  return `<div class="${kind==="ok"?"okbox":"errbox"}"><span>${kind==="ok"?"✅":"⚠️"}</span><div>${html}</div></div>`;
+}
+function backupMsg(kind,html){
+  const box=$("backupMsg"); if(!box) return;
+  box.innerHTML = html ? boxHtml(kind,html) : "";
+}
+function downloadBlob(blob,name){
+  try{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=name; a.rel="noopener";
+    if(document.body&&document.body.appendChild) document.body.appendChild(a);
+    if(a.click) a.click();
+    setTimeout(()=>{ try{URL.revokeObjectURL(url);}catch(e){} if(a.remove) a.remove(); },4000);
+  }catch(e){ toast("Không lưu được file — hãy copy nội dung"); }
+}
+function saveBlob(blob,name){
+  // iPhone/iPad: mở hộp chia sẻ để lưu vào Files; nơi khác: tải xuống như thường
+  try{
+    const f = (typeof File!=="undefined") ? new File([blob],name,{type:BACKUP_MIME}) : null;
+    if(f && navigator.canShare && navigator.canShare({files:[f]})){
+      navigator.share({files:[f],title:name}).catch(()=>downloadBlob(blob,name));
+      return true;
+    }
+  }catch(e){}
+  downloadBlob(blob,name);
+  return false;
+}
+async function exportBackup(){
+  backupMsg("","");
+  try{
+    const r = await fetch(BASE_URL+"/gateway/config/export",{headers:hdr()});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const text = await r.text();
+    const name = "gateway-backup-"+stamp()+".json";
+    const kb = Math.max(1, Math.round(text.length/1024));
+    const shared = saveBlob(new Blob([text],{type:BACKUP_MIME}), name);
+    backupMsg("ok", `<b>Đã tạo file sao lưu</b>
+      <div class="mono" style="margin-top:4px">${esc(name)} · ${kb} KB</div>
+      <div class="mono" style="margin-top:4px">${shared?"Chọn “Lưu vào Files” trong hộp vừa hiện.":"Kiểm tra thư mục Tải về / Files."}</div>
+      <div class="mono" style="margin-top:4px">File chứa API key và client key — đừng chia sẻ.</div>`);
+    toast("Đã tạo file sao lưu");
+  }catch(e){
+    backupMsg("err","Không tạo được file: "+esc(e.message||e));
+  }
+}
+function importBackupPicked(){
+  const el=$("backupFile");
+  const f = el && el.files && el.files[0];
+  if(!f) return;
+  let p;
+  try{ p = f.text ? f.text() : Promise.reject(new Error("không đọc được file")); }
+  catch(e){ p = Promise.reject(e); }
+  Promise.resolve(p).then(t=>importBackupText(t,f.name))
+    .catch(e=>openBackupSheet("err","Không đọc được file: "+esc(e.message||e)));
+}
+function openBackupSheet(kind,html){
+  const box=$("backupResult"); if(box) box.innerHTML = html ? boxHtml(kind,html) : "";
+  $("backupSheet").classList.add("open");
+}
+function closeBackupSheet(){ $("backupSheet").classList.remove("open"); }
+async function importBackupText(text,fileName){
+  let data;
+  try{ data = JSON.parse(text); }
+  catch(e){ openBackupSheet("err","File không phải JSON hợp lệ."); return null; }
+  if(!data || data.format!=="gateway-backup"){
+    openBackupSheet("err","Đây không phải file sao lưu của Gateway."); return null;
+  }
+  const when = data.exported_at ? new Date(data.exported_at*1000).toLocaleString() : "không rõ";
+  const nKeys = (data.api_keys||[]).length, nModels = (data.models||[]).length, nClients = (data.client_keys||[]).length;
+  const ok = confirm("Nhập file sao lưu?\n\nToàn bộ cài đặt và key trên máy này sẽ bị THAY bằng nội dung file.\n\n"
+    + "Xuất lúc: "+when+"\n"+nKeys+" API key · "+nModels+" model · "+nClients+" client key");
+  if(!ok) return null;
+  const url = (BASE_URL||location.origin).replace(/\/+$/,"");
+  let d;
+  try{
+    const r = await fetch(url+"/gateway/config/import",{method:"POST",
+      headers:Object.assign({"Content-Type":"application/json"}, CLIENT_KEY?{Authorization:"Bearer "+CLIENT_KEY}:{}),
+      body:text});
+    d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error((d.error&&d.error.message)||("HTTP "+r.status));
+  }catch(e){
+    openBackupSheet("err","Nhập thất bại: "+esc(e.message||e));
+    return null;
+  }
+  BASE_URL = url;
+  if(d.client_key) CLIENT_KEY = d.client_key;
+  try{
+    localStorage.setItem("gw_base_url",BASE_URL);
+    localStorage.setItem("gw_client_key",CLIENT_KEY);
+  }catch(e){}
+  const c = d.counts||{};
+  let html = `<b>Đã nhập xong${fileName?" từ file "+esc(fileName):""}</b>
+    <div class="mono" style="margin-top:6px">${c.api_keys||0} API key · ${c.models||0} model · ${c.client_keys||0} client key · ${c.settings||0} cài đặt</div>`;
+  if(d.client_key_source==="new")
+    html += `<div class="mono" style="margin-top:6px">File không kèm client key — đã tạo key mới cho máy này.</div>`;
+  if(d.restart_needed)
+    html += `<div class="mono" style="margin-top:6px">File đặt cổng ở <b>${esc(String(d.port))}</b> — cần khởi động lại cổng để đổi địa chỉ.</div>
+      <button class="btn primary block" style="margin-top:10px" onclick="restartGateway()">🔄 Khởi động lại cổng</button>`;
+  else backupMsg("ok","Đã nhập cấu hình từ file.");
+  html += `<button class="btn block" style="margin-top:10px" onclick="importEnterApp()">🚀 Vào bảng điều khiển</button>`;
+  openBackupSheet("ok",html);
+  toast("Đã nhập cấu hình từ file");
+  return d;
+}
+function importEnterApp(){
+  closeBackupSheet();
+  if($("loginUrl")) $("loginUrl").value=BASE_URL;
+  if($("loginKey")) $("loginKey").value=CLIENT_KEY;
+  enterApp();
+}
+function gatewayAddr(d){
+  const host = (d && d.host && d.host!=="0.0.0.0") ? d.host : (location.hostname||"127.0.0.1");
+  const scheme = (d && d.tls_enabled) ? "https" : (location.protocol==="https:" ? "https" : "http");
+  const port = (d && d.port) ? d.port : (location.port||"15199");
+  return scheme+"://"+host+":"+port;
+}
+async function restartGateway(){
+  if(!confirm("Khởi động lại cổng? Trang sẽ mở lại ở địa chỉ mới sau vài giây.")) return;
+  const box=$("backupResult");
+  try{
+    const d = await api("/gateway/restart",{method:"POST"});
+    const base = gatewayAddr(d);
+    try{ localStorage.setItem("gw_base_url",base); }catch(e){}
+    BASE_URL = base;
+    box.innerHTML = boxHtml("ok", `<b>Đang khởi động lại cổng</b>
+      <div class="mono" style="margin-top:6px">Địa chỉ mới: ${esc(base)}</div>`);
+    setTimeout(()=>location.replace(base+"/?key="+encodeURIComponent(CLIENT_KEY)),2500);
+  }catch(e){
+    box.innerHTML = boxHtml("err","Không khởi động lại được: "+esc(e.message||e));
+  }
 }
 
 /* ---------- auth / api ---------- */
@@ -1075,6 +1245,7 @@ function enterApp(){
   document.addEventListener("keydown",e=>{
     if(e.key!=="Enter") return;
     if($("setupSheet").classList.contains("open")){ runSetup(); return; }
+    if($("backupSheet").classList.contains("open")) return;
     if($("loginView").style.display!=="none") doLogin();
   });
 })();

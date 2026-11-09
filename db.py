@@ -20,6 +20,29 @@ def _ensure_column(c, table, col, decl):
     if col not in _columns(c, table):
         c.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, decl))
 
+# ---- cài đặt mặc định ----
+DEFAULT_SETTINGS = {
+        "port": "15199",
+        "host": "127.0.0.1",
+        "background": "0",
+        "client_key_required": "1",
+        "log_retention_days": "7",
+        "max_log_count": "5000",
+        "cors_enabled": "1",
+        "lan_enabled": "0",
+        "log_body_enabled": "0",
+        "tls_enabled": "0",
+        "tls_mode": "none",   # none|selfsigned|imported
+        "tls_cert_path": "",
+        "tls_key_path": "",
+        "rate_limit_enabled": "1",
+        "rate_limit_rpm": "60",
+        "rate_limit_burst": "10",
+        # chỉ dùng model miễn phí / rẻ nhất, bật sẵn
+        "free_models_only": "1",
+        "auto_discover_models": "1",
+}
+
 def init_db():
     c = conn()
     c.executescript("""
@@ -113,28 +136,7 @@ def init_db():
                           (mid, name, mid, 1 if free else 0, None, 1 if free else 0, now()))
 
     # ---- cài đặt mặc định ----
-    defaults = {
-        "port": "15199",
-        "host": "127.0.0.1",
-        "background": "0",
-        "client_key_required": "1",
-        "log_retention_days": "7",
-        "max_log_count": "5000",
-        "cors_enabled": "1",
-        "lan_enabled": "0",
-        "log_body_enabled": "0",
-        "tls_enabled": "0",
-        "tls_mode": "none",   # none|selfsigned|imported
-        "tls_cert_path": "",
-        "tls_key_path": "",
-        "rate_limit_enabled": "1",
-        "rate_limit_rpm": "60",
-        "rate_limit_burst": "10",
-        # chỉ dùng model miễn phí / rẻ nhất, bật sẵn
-        "free_models_only": "1",
-        "auto_discover_models": "1",
-    }
-    for k, v in defaults.items():
+    for k, v in DEFAULT_SETTINGS.items():
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)", (k, v))
     c.commit()
     c.close()
@@ -293,3 +295,162 @@ def validate_client_key(plaintext):
         c.commit()
     c.close()
     return row["id"] if row else None
+
+# ---------------------------------------------------------------- sao lưu / khôi phục
+# File sao lưu là JSON mang đủ cấu hình để máy khác nhập vào là chạy ngay:
+# cài đặt, nhà cung cấp + API key (nguyên văn), models, client key (chỉ hash)
+# và client key đang dùng (nguyên văn) để máy mới vào thẳng bảng điều khiển.
+BACKUP_FORMAT = "gateway-backup"
+BACKUP_VERSION = 1
+
+_BACKUP_TABLES = {
+    "providers": ("providers", ("id", "name", "base_url", "enabled", "protocol",
+                                "chat_path", "messages_path", "models_path", "key_url")),
+    "api_keys": ("api_keys", ("id", "provider", "label", "key_value", "enabled", "priority",
+                              "failure_count", "last_used_at", "last_error_at", "cooldown_until",
+                              "created_at")),
+    "gateway_models": ("models", ("id", "provider", "display_name", "enabled", "context_window",
+                                  "supports_streaming", "available", "is_free", "last_seen_at")),
+    "client_keys": ("client_keys", ("id", "name", "key_hash", "enabled", "created_at", "last_used_at")),
+}
+
+_BOOL_COLUMNS = {"enabled", "priority", "failure_count", "supports_streaming", "available", "is_free"}
+
+class BackupError(Exception):
+    """File sao lưu thiếu hoặc sai, không nhập được."""
+
+def export_config(client_key=None):
+    """Toàn bộ cấu hình + key, dạng ghi được ra file JSON."""
+    c = conn()
+    data = {
+        "format": BACKUP_FORMAT,
+        "version": BACKUP_VERSION,
+        "app": "Gateway",
+        "exported_at": now(),
+        "settings": {r["key"]: r["value"] for r in
+                     c.execute("SELECT key,value FROM settings").fetchall()},
+        "providers": [dict(r) for r in c.execute("SELECT * FROM providers").fetchall()],
+        "api_keys": [dict(r) for r in c.execute("SELECT * FROM api_keys").fetchall()],
+        "models": [dict(r) for r in c.execute("SELECT * FROM gateway_models").fetchall()],
+        "client_keys": [dict(r) for r in c.execute(
+            "SELECT id,name,key_hash,enabled,created_at,last_used_at FROM client_keys").fetchall()],
+    }
+    c.close()
+    key = (client_key or "").strip()
+    if key:
+        data["client_key"] = key
+    return data
+
+def _backup_rows(data, section):
+    rows = data.get(section)
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        raise BackupError("phan %s trong file khong hop le" % section)
+    return [r for r in rows if isinstance(r, dict)]
+
+def _fix_value(col, v):
+    if v is None and col not in ("context_window", "last_used_at", "last_error_at",
+                                 "cooldown_until", "created_at", "last_seen_at"):
+        return None
+    if col in _BOOL_COLUMNS:
+        return 1 if (v is True or str(v) in ("1", "true", "True")) else 0
+    if col in ("failure_count", "cooldown_until", "last_error_at"):
+        # trạng thái lỗi cũ không mang sang máy mới
+        return 0 if col == "failure_count" else None
+    return v
+
+def import_config(data, keep_client_key=None):
+    """Thay toàn bộ cấu hình bằng nội dung file sao lưu.
+
+    Trả {counts, client_key, client_key_source} — client_key là key dùng được
+    để vào bảng điều khiển ngay trên máy mới.
+    """
+    if not isinstance(data, dict) or data.get("format") != BACKUP_FORMAT:
+        raise BackupError("day khong phai file sao luu cua Gateway")
+    ver = data.get("version")
+    if not isinstance(ver, int) or ver < 1 or ver > BACKUP_VERSION:
+        raise BackupError("phien ban file khong ho tro: %s" % (ver,))
+    settings = data.get("settings")
+    if not isinstance(settings, dict) or not settings:
+        raise BackupError("file thieu phan cai dat")
+    sections = {t: _backup_rows(data, s) for t, (s, _cols) in _BACKUP_TABLES.items()}
+
+    c = sqlite3.connect(DB_PATH, timeout=30)
+    c.row_factory = sqlite3.Row
+    c.isolation_level = None
+    counts, skipped = {}, 0
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        for table, (section, cols) in _BACKUP_TABLES.items():
+            c.execute("DELETE FROM %s" % table)
+            n = 0
+            for row in sections[table]:
+                if not row.get(cols[0]):
+                    skipped += 1
+                    continue
+                vals = [_fix_value(col, row.get(col)) for col in cols]
+                try:
+                    c.execute("INSERT OR REPLACE INTO %s(%s) VALUES (%s)"
+                              % (table, ",".join(cols), ",".join("?" * len(cols))), vals)
+                except sqlite3.Error:
+                    skipped += 1
+                    continue
+                n += 1
+            counts[section] = n
+
+        c.execute("DELETE FROM settings")
+        for k, v in settings.items():
+            if k is None:
+                continue
+            c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)", (str(k), str(v)))
+        # bản cũ thiếu setting mới: thêm mặc định, không ghi đè
+        for k, v in DEFAULT_SETTINGS.items():
+            c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)", (k, v))
+        row = c.execute("SELECT value FROM settings WHERE key='port'").fetchone()
+        try:
+            port = int(row["value"]) if row else -1
+        except (TypeError, ValueError):
+            port = -1
+        if not (0 <= port <= 65535):
+            c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('port','15199')")
+        c.execute("COMMIT")
+    except Exception:
+        try:
+            c.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
+    finally:
+        c.close()
+    counts["settings"] = len(settings)
+    if skipped:
+        counts["skipped"] = skipped
+
+    # luôn để lại một client key dùng được: ưu tiên key ghi trong file
+    cand = (data.get("client_key") or "").strip()
+    source = "file"
+    if not cand:
+        cand = (keep_client_key or "").strip()
+        source = "request"
+    if not cand:
+        _cid, cand = new_client_key("khoi phuc")
+        source = "new"
+    else:
+        c = conn()
+        row = c.execute("SELECT id,enabled FROM client_keys WHERE key_hash=?",
+                        (hash_key(cand),)).fetchone()
+        if row is None:
+            c.execute("INSERT INTO client_keys(id,name,key_hash,enabled,created_at) VALUES (?,?,?,1,?)",
+                      (str(uuid.uuid4()),
+                       "khoi phuc (tu file)" if source == "file" else "khoi phuc (dang dung)",
+                       hash_key(cand), now()))
+        elif not row["enabled"]:
+            c.execute("UPDATE client_keys SET enabled=1 WHERE id=?", (row["id"],))
+        c.commit()
+        c.close()
+
+    # giữ nguyên trạng thái bật/tắt của từng model như trong file:
+    # chỉ tính lại cờ free theo luật của bản đang chạy, không áp lại chính sách
+    recompute_model_flags()
+    return {"counts": counts, "client_key": cand, "client_key_source": source}

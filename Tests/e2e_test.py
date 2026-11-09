@@ -185,6 +185,7 @@ def main():
     start_mock(MOCK_OPENAI_PORT, MockOpenAI)
     start_mock(MOCK_ANTHROPIC_PORT, MockAnthropic)
     db.init_db()
+    db.set_setting("port", str(GATEWAY_PORT))
     db.set_setting("rate_limit_rpm", "600")
     db.set_setting("rate_limit_burst", "200")
     httpd = server.make_server("127.0.0.1", GATEWAY_PORT)
@@ -338,6 +339,58 @@ def main():
     code, r6 = jcall("POST", "/gateway/onboard",
                      {"provider": "DeepSeek", "api_key": "sk-test-deepseek", "base_url": OA, "free_only": True})
     check("onboard bật lại chế độ chỉ free", code == 200 and r6.get("free_only") is True, r6.get("free_only"))
+
+    # ---- 7. sao lưu / khôi phục ----
+    code, before_models = jcall("GET", "/v1/models", key=ckey)
+    before_ids = sorted(m["id"] for m in before_models.get("data", []))
+    code, _ = jcall("GET", "/gateway/config/export")
+    check("xuất sao lưu không key -> 401", code == 401, code)
+    code, text = call("GET", "/gateway/config/export", key=ckey)
+    check("xuất sao lưu -> 200", code == 200, code)
+    try:
+        bk = json.loads(text)
+    except Exception:
+        bk = {}
+    check("file sao lưu đúng định dạng", bk.get("format") == "gateway-backup" and bk.get("version") == 1,
+          {k: bk.get(k) for k in ("format", "version")})
+    check("file sao lưu mang theo client key đang dùng", bk.get("client_key") == ckey, bool(bk.get("client_key")))
+    check("file sao lưu đủ API key, model, cài đặt",
+          len(bk.get("api_keys") or []) >= 2 and len(bk.get("models") or []) >= 3
+          and len(bk.get("settings") or {}) >= 10 and len(bk.get("client_keys") or []) >= 1,
+          {k: len(bk.get(k) or {}) for k in ("api_keys", "models", "settings", "client_keys")})
+    check("file sao lưu có key thượng nguồn nguyên văn",
+          any("sk-test-openai" == r.get("key_value") for r in (bk.get("api_keys") or [])), "khong thay key")
+
+    # xoá sạch cấu hình rồi khôi phục từ chính file vừa xuất
+    con = db.conn()
+    for t in ("api_keys", "gateway_models", "providers"):
+        con.execute("DELETE FROM %s" % t)
+    con.commit()
+    con.close()
+    code, imp = jcall("POST", "/gateway/config/import", bk, key=ckey)
+    check("nhập sao lưu -> 200", code == 200 and imp.get("ok"), imp)
+    check("nhập xong trả key dùng được ngay",
+          imp.get("client_key") == ckey and imp.get("client_key_source") == "file",
+          (imp.get("client_key_source"), imp.get("error")))
+    code, models = jcall("GET", "/v1/models", key=ckey)
+    ids = sorted(m["id"] for m in models.get("data", []))
+    check("nhập xong danh sách model giống trước khi xuất",
+          code == 200 and ids == before_ids, {"truoc": before_ids, "sau": ids})
+    check("nhập xong model free bật lại đúng", "claude-3-5-haiku-20241022" in ids and bool(ids), ids)
+    code, out = jcall("POST", "/v1/chat/completions",
+                      {"model": "claude-3-5-haiku-20241022", "messages": [{"role": "user", "content": "hi"}]}, key=ckey)
+    check("nhập xong gọi được thượng nguồn",
+          code == 200 and out.get("choices", [{}])[0].get("message", {}).get("content") == "hello-from-anthropic", out)
+    code, st = jcall("GET", "/gateway/status", key=ckey)
+    check("nhập xong giữ nguyên cài đặt cổng", code == 200 and str(st.get("port")) == str(GATEWAY_PORT), st)
+    check("cùng địa chỉ thì không đòi khởi động lại", imp.get("restart_needed") is False, imp.get("restart_needed"))
+
+    code, imp2 = jcall("POST", "/gateway/config/import", bk)
+    check("nhập từ chính máy này không cần key -> 200", code == 200 and imp2.get("ok"), code)
+    code, bad = jcall("POST", "/gateway/config/import", {"format": "la"}, key=ckey)
+    check("nhập file lạ -> 400", code == 400, bad)
+    code, bad2 = jcall("POST", "/gateway/config/import", {"format": "gateway-backup", "version": 1}, key=ckey)
+    check("nhập file thiếu cài đặt -> 400", code == 400, bad2)
 
     httpd.shutdown()
     failed = [r for r in RESULTS if not r[1]]

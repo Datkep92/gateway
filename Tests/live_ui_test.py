@@ -122,6 +122,7 @@ globalThis.document = {
 globalThis.localStorage = { d:{}, getItem(k){ return k in this.d ? this.d[k] : null; },
   setItem(k,v){ this.d[k]=String(v); }, removeItem(k){ delete this.d[k]; } };
 globalThis.navigator = { userAgent:"node" };
+globalThis.confirm = () => true;
 globalThis.window = globalThis; globalThis.history = { replaceState(){} }; globalThis.scrollTo = ()=>{};
 globalThis.location = { href:"%s/", origin:"%s", search:"", reload(){} };
 const GW = "%s", MOCK = "%s";
@@ -151,6 +152,58 @@ DRIVER = """
   say("da_dang_nhap", $("loginView").style.display === "none" && $("appView").classList.contains("ready"));
   say("key_luu", localStorage.getItem("gw_client_key") || "");
   say("dia_chi_luu", localStorage.getItem("gw_base_url") || "");
+
+  /* ---------- sao lưu / khôi phục ---------- */
+  const strip = s => (s||"").replace(/<[^>]+>/g," ").replace(/\\s+/g," ").trim();
+  const saved = [];
+  URL.createObjectURL = b => { saved.push(b); return "blob:ui"; };
+  URL.revokeObjectURL = () => {};
+  await exportBackup();
+  const xuatMsg = strip($("backupMsg").innerHTML);
+  say("xuat_co_tep", /gateway-backup-\\d{8}-\\d{4}\\.json/.test(xuatMsg));
+  say("xuat_co_canh_bao", /đừng chia sẻ/i.test(xuatMsg));
+  const bkText = saved.length ? await saved[0].text() : "";
+  let bk = {}; try { bk = JSON.parse(bkText); } catch(e) {}
+  say("xuat_dung_dinh_dang", bk.format === "gateway-backup" && bk.version === 1);
+  say("xuat_co_key_trong_file", typeof bk.client_key === "string" && bk.client_key.length > 20);
+  say("xuat_du_du_lieu", (bk.api_keys||[]).length > 0 && (bk.models||[]).length > 0
+       && Object.keys(bk.settings||{}).length > 5 && (bk.client_keys||[]).length > 0);
+  const keyTruoc = CLIENT_KEY;
+
+  await importBackupText("day khong phai json", "x.json");
+  say("bao_file_hong", /không phải JSON hợp lệ/i.test(strip($("backupResult").innerHTML)));
+  await importBackupText(JSON.stringify({ format:"khac" }), "x.json");
+  say("bao_file_la", /không phải file sao lưu/i.test(strip($("backupResult").innerHTML)));
+  say("sheet_dang_mo", $("backupSheet").classList.contains("open"));
+  closeBackupSheet();
+  say("sheet_da_dong", !$("backupSheet").classList.contains("open"));
+
+  // nhập chính file vừa xuất, đổi một cài đặt để thấy nó được nạp
+  bk.settings.rate_limit_rpm = "999";
+  const r1 = await importBackupText(JSON.stringify(bk), "sao-luu.json");
+  const nhapMsg = strip($("backupResult").innerHTML);
+  say("nhap_xong", !!r1 && /Đã nhập xong/.test(nhapMsg));
+  say("nhap_ghi_ten_tep", nhapMsg.indexOf("sao-luu.json") >= 0);
+  say("nhap_giu_key_cu", CLIENT_KEY === keyTruoc && localStorage.getItem("gw_client_key") === keyTruoc);
+  say("nhap_khong_doi_cong", /khởi động lại cổng/i.test(nhapMsg) === false);
+  importEnterApp();
+  await new Promise(r => setTimeout(r, 900));
+  say("vao_bang_dieu_khien", $("loginView").style.display === "none" && $("appView").classList.contains("ready"));
+  say("key_sau_nhap", CLIENT_KEY);
+  const st = await api("/gateway/settings");
+  say("cai_dat_sau_nhap", String(((st||{}).settings||{}).rate_limit_rpm));
+
+  // file cũ không kèm client key: vẫn phải vào được, máy tự cấp key mới
+  CLIENT_KEY = "";
+  const bk2 = JSON.parse(bkText);
+  delete bk2.client_key;
+  bk2.settings.rate_limit_rpm = "888";
+  const r2 = await importBackupText(JSON.stringify(bk2), "khong-key.json");
+  const msg2 = strip($("backupResult").innerHTML);
+  say("nhap_khong_key_bao_tao_moi", !!r2 && /đã tạo key mới/i.test(msg2));
+  say("nhap_khong_key_co_key_moi", typeof CLIENT_KEY === "string" && CLIENT_KEY.length > 20);
+  say("nhap_khong_key_luu_key", localStorage.getItem("gw_client_key") === CLIENT_KEY);
+  say("key_moi", CLIENT_KEY);
 })().catch(e => { console.log("loi_node: " + (e && e.message)); process.exit(3); });
 """
 
@@ -231,6 +284,39 @@ def main():
 
         code, st = call("GET", "/gateway/status", key=key)
         check("bảng điều khiển gọi được /gateway/status", code == 200 and st.get("status") == "running", st)
+
+        # ---- sao lưu / khôi phục qua chính mã giao diện ----
+        check("giao diện xuất được file có tên", out.get("xuat_co_tep") == "true", out.get("xuat_co_tep"))
+        check("giao diện nhắc file chứa key, đừng chia sẻ", out.get("xuat_co_canh_bao") == "true", out.get("xuat_co_canh_bao"))
+        check("file xuất ra đúng định dạng Gateway", out.get("xuat_dung_dinh_dang") == "true", out.get("xuat_dung_dinh_dang"))
+        check("file xuất ra có client key để máy mới dùng ngay",
+              out.get("xuat_co_key_trong_file") == "true", out.get("xuat_co_key_trong_file"))
+        check("file xuất ra đủ key, model, cài đặt", out.get("xuat_du_du_lieu") == "true", out.get("xuat_du_du_lieu"))
+        check("file hỏng bị báo đúng", out.get("bao_file_hong") == "true", out.get("bao_file_hong"))
+        check("file của phần mềm khác bị báo đúng", out.get("bao_file_la") == "true", out.get("bao_file_la"))
+        check("hộp nhập mở ra khi báo lỗi rồi đóng được",
+              out.get("sheet_dang_mo") == "true" and out.get("sheet_da_dong") == "true",
+              (out.get("sheet_dang_mo"), out.get("sheet_da_dong")))
+        check("nhập file báo đã nhập xong", out.get("nhap_xong") == "true", out.get("nhap_xong"))
+        check("nhập file ghi rõ tên tệp", out.get("nhap_ghi_ten_tep") == "true", out.get("nhap_ghi_ten_tep"))
+        keep_key = out.get("key_sau_nhap", "")
+        check("nhập xong vẫn giữ client key đang dùng", out.get("nhap_giu_key_cu") == "true", keep_key[:8])
+        check("cùng cổng thì không đòi khởi động lại", out.get("nhap_khong_doi_cong") == "true", out.get("nhap_khong_doi_cong"))
+        check("nhập xong bấm vào là vào bảng điều khiển", out.get("vao_bang_dieu_khien") == "true",
+              out.get("vao_bang_dieu_khien"))
+        check("cài đặt trong file được nạp thật", out.get("cai_dat_sau_nhap") == "999", out.get("cai_dat_sau_nhap"))
+        code, cfg = call("GET", "/gateway/settings", key=keep_key)
+        check("client key giữ lại vẫn gọi được máy chủ", code == 200, code)
+        new_key = out.get("key_moi", "")
+        check("file cũ không kèm key thì tự cấp key mới", out.get("nhap_khong_key_bao_tao_moi") == "true"
+              and out.get("nhap_khong_key_co_key_moi") == "true", new_key[:8])
+        check("key mới được lưu lại trên máy", out.get("nhap_khong_key_luu_key") == "true", out.get("nhap_khong_key_luu_key"))
+        code, _ = call("GET", "/gateway/status", key=new_key)
+        check("key tự cấp dùng được ngay", code == 200, code)
+        code, cfg2 = call("GET", "/gateway/settings", key=new_key)
+        check("lần nhập sau ghi đè cài đặt lần trước", code == 200
+              and str((cfg2.get("settings") or {}).get("rate_limit_rpm")) == "888",
+              cfg2.get("settings", {}).get("rate_limit_rpm"))
     finally:
         proc.terminate()
         try:
