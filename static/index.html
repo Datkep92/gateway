@@ -247,6 +247,53 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms !important;transition-duration:.001ms !important}
 }
+/* ---------- thiết lập nhanh (tấm trượt) ---------- */
+.sheetwrap{position:fixed;inset:0;z-index:70;display:none;align-items:flex-end;justify-content:center}
+.sheetwrap.open{display:flex}
+.sheetwrap .veil{position:absolute;inset:0;background:rgba(4,6,12,.62);opacity:0;transition:opacity .26s;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.sheetwrap.open .veil{opacity:1}
+.sheet{
+  position:relative;width:100%;max-width:780px;max-height:92vh;overflow:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:22px 22px 0 0;
+  padding:18px 16px calc(22px + env(safe-area-inset-bottom));box-shadow:var(--shadow);
+  transform:translateY(22px);opacity:0;transition:transform .3s cubic-bezier(.2,.8,.2,1),opacity .24s;
+}
+.sheetwrap.open .sheet{transform:none;opacity:1}
+.sheethead{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px}
+.sheethead h2{font-size:19px}
+.sheethead p{margin:4px 0 0;font-size:12.5px;color:var(--muted)}
+.provgrid{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:14px}
+.provcard{
+  display:grid;gap:3px;justify-items:start;text-align:left;padding:13px;border-radius:var(--r2);
+  background:var(--card2);border:1px solid var(--border);
+  transition:border-color .16s,transform .12s,background .16s,box-shadow .16s;animation:rise .34s backwards;
+}
+.provcard:hover{border-color:var(--border2);transform:translateY(-2px)}
+.provcard:active{transform:scale(.975)}
+.provcard.sel{border-color:transparent;background:var(--grad);color:#fff;box-shadow:0 12px 26px -16px rgba(108,140,255,.95)}
+.provcard .pi{font-size:21px;line-height:1.1}
+.provcard .pn{font-weight:700;font-size:14.5px}
+.provcard .ph{font-size:11.5px;line-height:1.35;color:var(--muted)}
+.provcard.sel .ph{color:rgba(255,255,255,.88)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;padding:4px 9px;border-radius:999px;background:var(--card2);border:1px solid var(--border);color:var(--muted)}
+.chip.free{color:#4ade80;border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.12)}
+html[data-theme="light"] .chip.free{color:#15803d}
+.okbox,.errbox{display:flex;gap:10px;align-items:flex-start;padding:13px;border-radius:var(--r2);margin-bottom:12px;font-size:14px;animation:rise .3s}
+.okbox{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.32)}
+.errbox{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.32)}
+.steps{display:grid;gap:8px;margin:0 0 14px;padding:0;list-style:none}
+.steps li{display:flex;gap:8px;font-size:13px;color:var(--muted)}
+.steps li b{color:var(--text);font-weight:700}
+details.adv{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:11px 13px}
+details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.spin{width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,.42);border-top-color:#fff;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (min-width:900px){
+  .sheetwrap{align-items:center;padding:22px}
+  .sheet{border-radius:22px;transform:translateY(12px) scale(.985)}
+  .provgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
 </style>
 </head>
 <body>
@@ -266,6 +313,7 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
       <div><label>Base URL</label><input id="loginUrl" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
       <div><label>Client key</label><input id="loginKey" placeholder="dán client key…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
       <button class="btn primary block" onclick="doLogin()">Đăng nhập</button>
+      <button class="btn block" onclick="openSetup()">⚡ Thiết lập một bước (máy chưa có key)</button>
       <div class="actions">
         <button class="btn" onclick="saveProfile()">＋ Lưu profile</button>
         <button class="btn" onclick="clearKey()">Xóa key đã lưu</button>
@@ -277,6 +325,65 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
   </div>
 </div>
 
+<!-- ============ THIẾT LẬP MỘT BƯỚC ============ -->
+<div id="setupSheet" class="sheetwrap" role="dialog" aria-modal="true" aria-label="Thiết lập một bước">
+  <div class="veil" onclick="closeSetup()"></div>
+  <div class="sheet">
+    <div class="sheethead">
+      <div style="flex:1;min-width:0">
+        <h2>⚡ Thiết lập một bước</h2>
+        <p id="setupSub">Chọn nhà cung cấp rồi dán API key — máy tự làm phần còn lại.</p>
+      </div>
+      <button class="iconbtn" onclick="closeSetup()" aria-label="Đóng">✕</button>
+    </div>
+
+    <div id="setupForm">
+      <label>Nhà cung cấp</label>
+      <div class="provgrid" id="provGrid"></div>
+
+      <div class="stack">
+        <div>
+          <label>API key <span class="mono" id="setupKeyHint" style="font-weight:500"></span></label>
+          <input id="setupKey" placeholder="dán API key..." autocapitalize="off" autocorrect="off" spellcheck="false">
+        </div>
+        <div>
+          <label>Base URL <span class="mono" id="setupBaseHint" style="font-weight:500"></span></label>
+          <input id="setupBase" placeholder="để trống = dùng địa chỉ mặc định" inputmode="url"
+                 autocapitalize="off" autocorrect="off" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="spread" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:12px">
+        <div>
+          <div style="font-weight:600;font-size:14px">Chỉ dùng model miễn phí</div>
+          <div class="mono">tự tắt các model tính phí</div>
+        </div>
+        <div class="switch on" id="setupFree" onclick="this.classList.toggle('on')"></div>
+      </div>
+
+      <details class="adv" style="margin-top:12px">
+        <summary>Tuỳ chọn khác</summary>
+        <div class="stack" style="margin-top:12px">
+          <div><label>Tên gợi nhớ cho key</label><input id="setupLabel" placeholder="ví dụ: key chính" autocapitalize="off"></div>
+          <div><label>Địa chỉ mở trang lấy key</label><div class="mono" id="setupKeyUrl">–</div></div>
+        </div>
+      </details>
+
+      <ul class="steps" style="margin-top:14px">
+        <li>1. <b>Tự nhận diện</b> nhà cung cấp từ key và địa chỉ.</li>
+        <li>2. <b>Tự dò</b> danh sách model đang có.</li>
+        <li>3. <b>Tự bật</b> model miễn phí và tạo client key cho bạn.</li>
+      </ul>
+
+      <div id="setupMsg"></div>
+      <button class="btn primary block" id="setupGo" onclick="runSetup()">Thiết lập ngay</button>
+      <button class="btn block" style="margin-top:8px" onclick="closeSetup()">Để sau</button>
+    </div>
+
+    <div id="setupDone" style="display:none"></div>
+  </div>
+</div>
+
 <!-- ============ APP ============ -->
 <div id="appView" class="app">
   <aside class="sidebar">
@@ -285,6 +392,7 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
       <div><h1>Gateway</h1><p style="margin:2px 0 0;font-size:12px;color:var(--muted)">Bảng điều khiển</p></div>
     </div>
     <button class="navbtn active" data-tab="dashboard" onclick="show('dashboard')"><span class="ico">📊</span> Tổng quan</button>
+    <button class="navbtn" onclick="openSetup()"><span class="ico">⚡</span> Thiết lập một bước</button>
     <button class="navbtn" data-tab="keys" onclick="show('keys')"><span class="ico">🔑</span> API keys</button>
     <button class="navbtn" data-tab="models" onclick="show('models')"><span class="ico">🧠</span> Models</button>
     <button class="navbtn" data-tab="logs" onclick="show('logs')"><span class="ico">📄</span> Logs</button>
@@ -299,6 +407,7 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
     <header class="topbar">
       <div class="title" id="pageTitle">Tổng quan</div>
       <span class="pill"><span class="dot" id="connDot"></span><span id="connTxt">offline</span></span>
+      <button class="iconbtn mobonly" onclick="openSetup()" aria-label="Thiết lập nhanh">⚡</button>
       <button class="iconbtn mobonly" onclick="toggleTheme()" id="themeIcoM">🌙</button>
       <button class="iconbtn mobonly" onclick="logout()">🚪</button>
     </header>
@@ -504,6 +613,144 @@ function saveProfile(){
 function delProfile(i){ const ps=getProfiles(); ps.splice(i,1); setProfiles(ps); renderProfiles(); }
 function quickLogin(i){ const p=getProfiles()[i]; $("loginUrl").value=p.url; $("loginKey").value=p.key; doLogin(); }
 function clearKey(){ localStorage.removeItem("gw_client_key"); localStorage.removeItem("gw_base_url"); $("loginKey").value=""; toast("Đã xóa key đã lưu"); }
+
+/* ---------- thiết lập một bước ---------- */
+const PROVS = [
+  {id:"",          ico:"🔍", name:"Tự nhận diện", hint:"dán key, máy tự tìm nhà cung cấp", base:"",                                kh:"API key",       url:""},
+  {id:"openai",    ico:"🟢", name:"OpenAI",       hint:"api.openai.com",                        base:"https://api.openai.com",           kh:"sk-...",        url:"https://platform.openai.com/api-keys"},
+  {id:"anthropic", ico:"🟣", name:"Claude",       hint:"api.anthropic.com",                     base:"https://api.anthropic.com",        kh:"sk-ant-...",    url:"https://console.anthropic.com/settings/keys"},
+  {id:"deepseek",  ico:"🔵", name:"DeepSeek",     hint:"api.deepseek.com",                      base:"https://api.deepseek.com",         kh:"sk-...",        url:"https://platform.deepseek.com/api_keys"},
+  {id:"opencode",  ico:"⚡", name:"OpenCode Zen", hint:"nhiều model -free",                     base:"https://opencode.ai/inference",    kh:"console key",   url:"https://opencode.ai/console"},
+  {id:"custom",    ico:"🛠", name:"Khác…",        hint:"nhập base URL riêng",                   base:"",                                 kh:"API key",       url:""}
+];
+let setupProv = "";
+function renderProvGrid(){
+  const g = $("provGrid"); if(!g) return;
+  g.innerHTML = PROVS.map(p=>`
+    <button class="provcard ${p.id===setupProv?'sel':''}" style="animation-delay:${PROVS.indexOf(p)*40}ms" onclick="pickProv('${p.id}')">
+      <span class="pi">${p.ico}</span>
+      <span class="pn">${esc(p.name)}</span>
+      <span class="ph">${esc(p.hint)}</span>
+    </button>`).join("");
+}
+function pickProv(id){
+  setupProv = id;
+  const p = PROVS.find(x=>x.id===id) || PROVS[0];
+  $("setupBase").value = p.base;
+  $("setupKeyHint").textContent = p.kh ? "· " + p.kh : "";
+  $("setupBaseHint").textContent = id==="custom" ? "· bắt buộc" : (p.base ? "· mặc định" : "· tự nhận diện");
+  $("setupKeyUrl").textContent = p.url || "–";
+  renderProvGrid();
+  const inp = $("setupKey"); if(inp) inp.focus();
+}
+function openSetup(){
+  $("setupSheet").classList.add("open");
+  document.body.style.overflow="hidden";
+  $("setupForm").style.display="";
+  $("setupDone").style.display="none";
+  $("setupMsg").innerHTML="";
+  $("setupGo").disabled=false;
+  $("setupGo").textContent="Thiết lập ngay";
+  $("setupFree").classList.add("on");
+  $("setupLabel").value="";
+  setupProv = "";
+  pickProv("");
+}
+function closeSetup(){
+  $("setupSheet").classList.remove("open");
+  document.body.style.overflow="";
+}
+function setupHint(){
+  if(setupProv==="") return "Mẹo: chọn đúng nhà cung cấp ở trên (DeepSeek, OpenCode…) nếu key không phải của OpenAI.";
+  return "Kiểm tra lại key còn hiệu lực, hoặc dán thêm base URL nếu là nhà cung cấp riêng.";
+}
+function setupHeaders(){
+  const h = {"Content-Type":"application/json"};
+  if(CLIENT_KEY) h["Authorization"]="Bearer "+CLIENT_KEY;
+  return h;
+}
+async function runSetup(){
+  const key = $("setupKey").value.trim();
+  const base = $("setupBase").value.trim();
+  if(!key){ toast("Dán API key trước"); $("setupKey").focus(); return; }
+  if(setupProv==="custom" && !base){ toast("Nhà cung cấp khác cần base URL"); $("setupBase").focus(); return; }
+  const typed = ($("loginUrl").value.trim() || location.origin).replace(/\/+$/,"");
+  BASE_URL = typed;
+  const btn = $("setupGo");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Đang thiết lập...';
+  $("setupMsg").innerHTML = "";
+  const payload = {api_key:key, free_only:$("setupFree").classList.contains("on")};
+  if(setupProv) payload.provider = setupProv;
+  if(base) payload.base_url = base;
+  const lbl = $("setupLabel").value.trim();
+  if(lbl) payload.label = lbl;
+  try{
+    const r = await fetch(BASE_URL+"/gateway/onboard",{method:"POST",headers:setupHeaders(),body:JSON.stringify(payload)});
+    let d = {}; try{ d = await r.json(); }catch(e){}
+    if(!r.ok) throw new Error((d.error&&d.error.message) || ("HTTP "+r.status));
+    renderSetupDone(d);
+  }catch(e){
+    $("setupMsg").innerHTML = `<div class="errbox"><span>⚠️</span><div>
+      <b>Chưa thiết lập được</b>
+      <div class="mono" style="margin-top:4px">${esc(e.message)}</div>
+      <div class="mono" style="margin-top:6px">${esc(setupHint())}</div></div></div>`;
+  }finally{
+    btn.disabled=false;
+    btn.textContent="Thiết lập ngay";
+  }
+}
+function renderSetupDone(d){
+  const models = d.models||[];
+  const freeN = models.filter(m=>m.free).length;
+  const okLine = d.verify_ok
+    ? `Đã kiểm tra key · dò được ${models.length} model (${freeN} miễn phí)`
+    : `Chưa gọi thử được: ${esc(d.verify_error||"không rõ lý do")}`;
+  const hasKey = !!d.client_key;
+  $("setupForm").style.display="none";
+  const box = $("setupDone");
+  box.style.display="";
+  box.innerHTML = `
+    <div class="okbox"><span>✅</span><div><b>Xong — ${esc(d.label||d.provider||"")} đã sẵn sàng</b>
+      <div class="mono" style="margin-top:4px">${okLine}</div></div></div>
+
+    <div class="item" style="margin-bottom:12px">
+      <div class="kv"><span class="k">Nhà cung cấp</span><span class="v">${esc(d.provider||"")}${d.detected_by?" · nhận ra nhờ "+esc(d.detected_by):""}</span></div>
+      <div class="kv"><span class="k">Model đang bật</span><span class="v">${models.length}</span></div>
+      <div class="kv"><span class="k">Model mặc định</span><span class="v mono">${esc(d.default_model||"–")}</span></div>
+      <div class="kv"><span class="k">Chế độ</span><span class="v">${d.free_only?"chỉ model miễn phí":"tất cả model"}</span></div>
+    </div>
+
+    ${hasKey ? `
+      <label>Client key (dán vào app của bạn)</label>
+      <div class="copybox" id="doneKey" style="margin-bottom:8px">${esc(d.client_key)}</div>
+      <button class="btn sm" style="margin-bottom:14px" onclick="copyValue('${esc(d.client_key)}','client key')">📋 Copy client key</button>
+    ` : `
+      <div class="errbox"><span>🔐</span><div><b>Máy đã có client key</b>
+        <div class="mono">Vì an toàn, key cũ không hiện lại. Dán key bạn đã lưu để vào bảng điều khiển.</div></div></div>
+      <div class="stack" style="margin-bottom:12px">
+        <div><label>Client key đã lưu</label><input id="doneKeyInput" placeholder="dán client key..." autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      </div>`}
+
+    <label>Kết nối cho app / script</label>
+    <div class="copybox" style="margin-bottom:6px">${esc(d.openai_base_url||"")}</div>
+    <div class="mono" style="margin-bottom:10px">OpenAI: dùng địa chỉ này · Claude: ${esc(d.anthropic_base_url||"")}</div>
+    <button class="btn sm" style="margin-bottom:16px" onclick="copyValue('${esc(d.openai_base_url||"")}','base URL')">📋 Copy base URL</button>
+
+    <button class="btn primary block" onclick="finishSetup()">🚀 Vào bảng điều khiển</button>
+    <button class="btn block" style="margin-top:8px" onclick="closeSetup()">Đóng</button>`;
+}
+function finishSetup(){
+  const typed = $("doneKey");
+  const manual = $("doneKeyInput");
+  const key = typed ? typed.textContent.trim() : (manual ? manual.value.trim() : "");
+  if(!key){ toast("Dán client key để đăng nhập"); if(manual) manual.focus(); return; }
+  $("loginUrl").value = BASE_URL;
+  $("loginKey").value = key;
+  closeSetup();
+  doLogin();
+  toast("Đã thiết lập xong");
+}
 
 /* ---------- auth / api ---------- */
 function doLogin(){
@@ -821,8 +1068,13 @@ function enterApp(){
   }
   $("loginUrl").value=BASE_URL; $("loginKey").value=CLIENT_KEY;
   renderProfiles();
+  renderProvGrid();
   if(CLIENT_KEY) enterApp();
-  document.addEventListener("keydown",e=>{ if(e.key==="Enter" && $("loginView").style.display!=="none") doLogin(); });
+  document.addEventListener("keydown",e=>{
+    if(e.key!=="Enter") return;
+    if($("setupSheet").classList.contains("open")){ runSetup(); return; }
+    if($("loginView").style.display!=="none") doLogin();
+  });
 })();
 </script>
 </body>

@@ -35,7 +35,11 @@ def main():
     host = db.get_setting("host", "127.0.0.1")
     if db.get_setting("lan_enabled", "0") == "1":
         host = "0.0.0.0"
-    port = int(db.get_setting("port", "151199"))
+    port = int(db.get_setting("port", "15199"))
+    if not (0 <= port <= 65535):
+        print(f"Port {port} không hợp lệ, dùng 15199")
+        port = 15199
+        db.set_setting("port", "15199")
     tls_enabled = db.get_setting("tls_enabled", "0") == "1"
     cert, key = ("", "")
     if tls_enabled:

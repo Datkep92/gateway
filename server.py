@@ -1,6 +1,6 @@
 import http.server, socketserver, threading, time, json, os, urllib.parse, ssl, socket
 
-import db, keypool, proxy, rate_limit
+import db, keypool, proxy, rate_limit, providers, translate
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -50,6 +50,14 @@ def redact_key_value(v):
     if not v:
         return ""
     return v[:4] + "..." if len(v) > 4 else v
+
+# Model không dùng để trò chuyện: không bao giờ chọn làm mặc định.
+_NON_CHAT = ("embed", "whisper", "tts", "dall-e", "moderation", "audio", "rerank",
+             "text-similarity", "image", "vision-encoder", "guard", "davinci", "babbage")
+
+def chat_model(model_id):
+    m = (model_id or "").lower()
+    return bool(m) and not any(p in m for p in _NON_CHAT)
 
 def log_request(client_key_id, provider, model, endpoint, status_code, latency_ms, stream, key_id, error_code=None, error_message=None, body=None):
     try:
@@ -120,6 +128,9 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             if path == "/v1/messages":
                 self._anthropic_messages()
                 return
+            if path == "/gateway/onboard":
+                self._gateway_onboard()
+                return
             if path.startswith("/gateway/"):
                 self._gateway_post(path)
                 return
@@ -189,18 +200,109 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(429)
                 self.send_header("Retry-After", str(int(wait)+1))
                 self.send_header("Content-Type", "application/json")
+                _rl = json.dumps({"error":{"message":"rate limited"}}).encode()
+                self.send_header("Content-Length", str(len(_rl)))
+                self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(json.dumps({"error":{"message":"rate limited"}}).encode())
+                self.close_connection = True
+                self.wfile.write(_rl)
                 log_request(cid, None, None, "/v1/models", 429, int((time.time()-self._t0)*1000), False, None)
                 return
         c = db.conn()
-        rows = c.execute("SELECT id,provider,display_name FROM gateway_models WHERE enabled=1").fetchall()
+        rows = c.execute("SELECT id,provider,display_name FROM gateway_models WHERE enabled=1 AND available=1").fetchall()
         c.close()
         data = {"object":"list","data":[]}
         for r in rows:
             data["data"].append({"id": r["id"], "object":"model", "created": int(time.time()), "owned_by": r["provider"]})
         json_response(self, 200, data)
         log_request(cid, None, None, "/v1/models", 200, int((time.time()-self._t0)*1000), False, None)
+
+    # ---- chọn nhà cung cấp theo tên model ----
+    def _connected_providers(self):
+        c = db.conn()
+        rows = c.execute("SELECT provider, COUNT(*) n FROM api_keys WHERE enabled=1 GROUP BY provider").fetchall()
+        c.close()
+        return [r["provider"] for r in rows]
+
+    def _resolve_provider(self, model):
+        """Tên model -> nhà cung cấp sẽ phục vụ nó."""
+        name = (model or "").strip()
+        c = db.conn()
+        row = None
+        if name:
+            row = c.execute("SELECT provider FROM gateway_models WHERE id=?", (name,)).fetchone()
+            if row is None:
+                row = c.execute("""SELECT provider FROM gateway_models WHERE id LIKE ?
+                                   ORDER BY available DESC, enabled DESC LIMIT 1""", (name + "%",)).fetchone()
+        connected = [r["provider"] for r in c.execute(
+            "SELECT DISTINCT provider FROM api_keys WHERE enabled=1").fetchall()]
+        c.close()
+        if row is not None:
+            p = providers.canonical(row["provider"])
+            if p and (not connected or p in connected):
+                return p
+        g = providers.guess(name)
+        if g and (not connected or g in connected):
+            return g
+        if connected:
+            return connected[0]
+        return g or "openai"
+
+    def _apply_default_model(self, j):
+        """Client không cần gửi tên model: thiếu thì lấy model mặc định dùng được."""
+        model = (j.get("model") or "").strip()
+        if model:
+            return model
+        c = db.conn()
+        rows = c.execute("""SELECT id FROM gateway_models WHERE enabled=1 AND available=1
+                            ORDER BY is_free DESC, provider, id""").fetchall()
+        c.close()
+        ids = [r["id"] for r in rows]
+        keep = db.get_setting("default_model", "") or ""
+        if keep in ids and chat_model(keep):
+            return keep
+        chat = [i for i in ids if chat_model(i)]
+        model = (chat or ids or [""])[0]
+        if model:
+            db.set_setting("default_model", model)
+        return model
+
+    def _pipe_stream(self, payload, translator=None, chunked=True):
+        """Chuyển tiếp luồng SSE; có translator thì dịch từng mẩu.
+
+        Dùng Transfer-Encoding: chunked để client biết điểm kết thúc, nếu không
+        kết nối sẽ mở mãi và bên gọi bị treo cho tới lúc hết thời gian chờ.
+        """
+        def write(data):
+            if not data:
+                return
+            if chunked:
+                self.wfile.write(b"%x\r\n" % len(data) + data + b"\r\n")
+            else:
+                self.wfile.write(data)
+            self.wfile.flush()
+
+        try:
+            while True:
+                block = payload.read(4096)
+                if not block:
+                    break
+                write(translator.feed(block) if translator is not None else block)
+            if translator is not None:
+                write(translator.feed(b"\n\n"))
+        except Exception:
+            pass
+        finally:
+            try:
+                payload.close()
+            except Exception:
+                pass
+            if chunked:
+                try:
+                    self.wfile.write(b"0\r\n\r\n")
+                    self.wfile.flush()
+                except Exception:
+                    pass
 
     def _chat_completions(self):
         cid, err = self._auth_client()
@@ -216,19 +318,39 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             log_request(cid, None, None, "/v1/chat/completions", 400, int((time.time()-self._t0)*1000), False, None)
             return
         stream = bool(j.get("stream", False))
-        model = j.get("model", "")
+        model = self._apply_default_model(j)
+        if model and not j.get("model"):
+            j["model"] = model
+            body = json.dumps(j).encode()
         if cid:
             ok, wait = rate_limit.check(cid)
             if not ok:
                 self.send_response(429)
                 self.send_header("Retry-After", str(int(wait)+1))
                 self.send_header("Content-Type", "application/json")
+                _rl = json.dumps({"error":{"message":"rate limited"}}).encode()
+                self.send_header("Content-Length", str(len(_rl)))
+                self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(json.dumps({"error":{"message":"rate limited"}}).encode())
+                self.close_connection = True
+                self.wfile.write(_rl)
                 log_request(cid, "openai", model, "/v1/chat/completions", 429, int((time.time()-self._t0)*1000), stream, None)
                 return
+        provider = self._resolve_provider(model)
+        spec = providers.spec(provider) or {}
+        upstream_anthropic = spec.get("protocol") == providers.ANTHROPIC
+        out_body = body
+        if upstream_anthropic:
+            try:
+                out_body = json.dumps(translate.openai_to_anthropic(j)).encode()
+            except Exception as e:
+                json_response(self, 400, {"error":{"message":"khong dich duoc yeu cau: %s" % e,"type":"invalid_request"}})
+                return
         t0 = time.time()
-        ok, status, headers, payload, key_id, errb = proxy.openai_chat(body, stream)
+        if upstream_anthropic:
+            ok, status, headers, payload, key_id, errb = proxy.messages(provider, out_body, stream)
+        else:
+            ok, status, headers, payload, key_id, errb = proxy.chat(provider, out_body, stream)
         latency = int((time.time()-t0)*1000)
         if not ok:
             self.send_response(status if status else 502)
@@ -240,38 +362,34 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(errb)
             except BrokenPipeError:
                 pass
-            log_request(cid, "openai", model, "/v1/chat/completions", status if status else 502, latency, stream, key_id, "upstream_error", errb.decode(errors="ignore")[:200])
+            log_request(cid, provider, model, "/v1/chat/completions", status if status else 502, latency, stream, key_id, "upstream_error", errb.decode(errors="ignore")[:500])
             return
         if stream:
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
+            self.send_header("Transfer-Encoding", "chunked")
             handle_cors(self)
             self.end_headers()
-            try:
-                while True:
-                    chunk = payload.read(4096)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
-            except Exception:
-                pass
-            finally:
-                try:
-                    payload.close()
-                except Exception:
-                    pass
-            log_request(cid, "openai", model, "/v1/chat/completions", 200, int((time.time()-t0)*1000), True, key_id)
+            translator = translate.AnthropicToOpenAIStream(model) if upstream_anthropic else None
+            self._pipe_stream(payload, translator)
+            log_request(cid, provider, model, "/v1/chat/completions", 200, int((time.time()-t0)*1000), True, key_id)
         else:
             data = payload.read() if hasattr(payload, "read") else payload
             try:
                 payload.close()
             except Exception:
                 pass
+            ctype = headers.get("Content-Type", "application/json")
+            if upstream_anthropic:
+                try:
+                    data = json.dumps(translate.anthropic_to_openai(json.loads(data or b"{}"), model)).encode()
+                    ctype = "application/json"
+                except Exception:
+                    pass
             self.send_response(status)
-            self.send_header("Content-Type", headers.get("Content-Type", "application/json"))
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             handle_cors(self)
             self.end_headers()
@@ -279,7 +397,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(data)
             except BrokenPipeError:
                 pass
-            log_request(cid, "openai", model, "/v1/chat/completions", status, int((time.time()-t0)*1000), False, key_id)
+            log_request(cid, provider, model, "/v1/chat/completions", status, int((time.time()-t0)*1000), False, key_id)
 
     def _anthropic_messages(self):
         cid, err = self._auth_client()
@@ -295,19 +413,39 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             log_request(cid, None, None, "/v1/messages", 400, int((time.time()-self._t0)*1000), False, None)
             return
         stream = bool(j.get("stream", False))
-        model = j.get("model", "")
+        model = self._apply_default_model(j)
+        if model and not j.get("model"):
+            j["model"] = model
+            body = json.dumps(j).encode()
         if cid:
             ok, wait = rate_limit.check(cid)
             if not ok:
                 self.send_response(429)
                 self.send_header("Retry-After", str(int(wait)+1))
                 self.send_header("Content-Type", "application/json")
+                _rl = json.dumps({"error":{"message":"rate limited"}}).encode()
+                self.send_header("Content-Length", str(len(_rl)))
+                self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(json.dumps({"error":{"message":"rate limited"}}).encode())
+                self.close_connection = True
+                self.wfile.write(_rl)
                 log_request(cid, "anthropic", model, "/v1/messages", 429, int((time.time()-self._t0)*1000), stream, None)
                 return
+        provider = self._resolve_provider(model)
+        spec = providers.spec(provider) or {}
+        upstream_openai = spec.get("protocol") == providers.OPENAI
+        out_body = body
+        if upstream_openai:
+            try:
+                out_body = json.dumps(translate.anthropic_to_openai_request(j)).encode()
+            except Exception as e:
+                json_response(self, 400, {"error":{"message":"khong dich duoc yeu cau: %s" % e,"type":"invalid_request"}})
+                return
         t0 = time.time()
-        ok, status, headers, payload, key_id, errb = proxy.anthropic_messages(body, stream)
+        if upstream_openai:
+            ok, status, headers, payload, key_id, errb = proxy.chat(provider, out_body, stream)
+        else:
+            ok, status, headers, payload, key_id, errb = proxy.messages(provider, out_body, stream)
         latency = int((time.time()-t0)*1000)
         if not ok:
             self.send_response(status if status else 502)
@@ -319,38 +457,34 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(errb)
             except BrokenPipeError:
                 pass
-            log_request(cid, "anthropic", model, "/v1/messages", status if status else 502, latency, stream, key_id, "upstream_error", errb.decode(errors="ignore")[:200])
+            log_request(cid, provider, model, "/v1/messages", status if status else 502, latency, stream, key_id, "upstream_error", errb.decode(errors="ignore")[:500])
             return
         if stream:
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
+            self.send_header("Transfer-Encoding", "chunked")
             handle_cors(self)
             self.end_headers()
-            try:
-                while True:
-                    chunk = payload.read(4096)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
-            except Exception:
-                pass
-            finally:
-                try:
-                    payload.close()
-                except Exception:
-                    pass
-            log_request(cid, "anthropic", model, "/v1/messages", 200, int((time.time()-t0)*1000), True, key_id)
+            translator = translate.OpenAIToAnthropicStream(model) if upstream_openai else None
+            self._pipe_stream(payload, translator)
+            log_request(cid, provider, model, "/v1/messages", 200, int((time.time()-t0)*1000), True, key_id)
         else:
             data = payload.read() if hasattr(payload, "read") else payload
             try:
                 payload.close()
             except Exception:
                 pass
+            ctype = headers.get("Content-Type", "application/json")
+            if upstream_openai:
+                try:
+                    data = json.dumps(translate.openai_to_anthropic_response(json.loads(data or b"{}"), model)).encode()
+                    ctype = "application/json"
+                except Exception:
+                    pass
             self.send_response(status)
-            self.send_header("Content-Type", headers.get("Content-Type", "application/json"))
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             handle_cors(self)
             self.end_headers()
@@ -358,7 +492,163 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(data)
             except BrokenPipeError:
                 pass
-            log_request(cid, "anthropic", model, "/v1/messages", status, int((time.time()-t0)*1000), False, key_id)
+            log_request(cid, provider, model, "/v1/messages", status, int((time.time()-t0)*1000), False, key_id)
+
+    # ---- thiết lập một bước: dán key là xong ----
+    def _setup_allowed(self):
+        if self.client_address[0] in ("127.0.0.1", "::1", "localhost"):
+            return True
+        return db.validate_client_key(extract_key(self.headers)) is not None
+
+    def _probe_models(self, base, protocol, api_key, paths=("/v1/models", "/models")):
+        """Thử dò model ở một địa chỉ. -> (ok, [id...], models_path, lỗi)
+
+        ok=True khi máy chủ trả lời được (kể cả danh sách rỗng): key sống, chỉ là
+        nhà cung cấp không kèm model nào.
+        """
+        err, saw_ok = "", False
+        for mp in paths:
+            ok, ids, e = proxy.discover_models_at((base or "").rstrip("/") + mp, protocol,
+                                                  api_key, timeout=25)
+            if ok:
+                saw_ok = True
+                if ids:
+                    return True, ids, mp, ""
+            err = e or err
+        return (saw_ok, [], paths[0], "") if saw_ok else (False, [], paths[0], err)
+
+    def _gateway_onboard(self):
+        """Một bước: chỉ cần API key (kèm base URL nếu là nhà cung cấp lạ).
+
+        Tự đoán nhà cung cấp, tự dò model, tự bật model miễn phí, tự tạo client key.
+        """
+        if not self._setup_allowed():
+            json_response(self, 403, {"error":{"message":"chi thiet lap duoc tu chinh may nay","type":"forbidden"}})
+            return
+        body = read_body(self)
+        try:
+            j = json.loads(body or b"{}")
+        except Exception:
+            json_response(self, 400, {"error":{"message":"invalid json"}})
+            return
+        provider_in = j.get("provider")
+        if provider_in and providers.canonical(provider_in) is None:
+            json_response(self, 400, {"error":{"message":"provider khong hop le","type":"invalid_request"}})
+            return
+        api_key = (j.get("api_key") or "").strip()
+        if not api_key:
+            json_response(self, 400, {"error":{"message":"thieu API key","type":"invalid_request"}})
+            return
+        raw_base = providers.normalize_base(j.get("base_url"))
+
+        # 1. đoán nhà cung cấp (tên nhập tay > máy chủ > đường dẫn > tiền tố key)
+        guess = providers.detect(provider=provider_in, base_url=raw_base, api_key=api_key)
+        cands = providers.candidates(provider=provider_in, base_url=raw_base, api_key=api_key)
+        chosen, base_used, protocol, models_path = None, "", providers.OPENAI, "/v1/models"
+        ids, verify_ok, verify_msg, detected_by = [], False, "", ""
+
+        if guess:
+            sp = providers.spec(guess) or {}
+            base_used = raw_base or sp.get("base_url") or ""
+            protocol = sp.get("protocol") or providers.OPENAI
+            ok, ids, models_path, err = self._probe_models(base_used, protocol, api_key)
+            chosen, verify_ok, verify_msg = guess, ok, ("" if ok else err)
+            detected_by = "provider" if providers.canonical(provider_in) else ("base_url" if raw_base else "key")
+        else:
+            # 2. key không nói lên điều gì: thử lần lượt các nhà cung cấp quen
+            err = ""
+            for cand in cands:
+                sp = providers.spec(cand) or {}
+                ok, ids, mp, e = self._probe_models(sp.get("base_url") or "",
+                                                    sp.get("protocol") or providers.OPENAI, api_key)
+                err = e or err
+                if ok:
+                    chosen, base_used = cand, sp.get("base_url") or ""
+                    protocol, models_path = sp.get("protocol") or providers.OPENAI, mp
+                    verify_ok, verify_msg, detected_by = True, "", "probe"
+                    break
+            # 3. địa chỉ lạ: thử trực tiếp như nhà cung cấp tự nhập
+            if chosen is None and raw_base:
+                for prot in (providers.OPENAI, providers.ANTHROPIC):
+                    ok, ids, mp, e = self._probe_models(raw_base, prot, api_key)
+                    err = e or err
+                    if ok:
+                        chosen, base_used = "custom", raw_base
+                        protocol, models_path = prot, mp
+                        verify_ok, verify_msg, detected_by = True, "", "probe"
+                        break
+                if chosen is None:
+                    # chưa gọi được vẫn nhận: đoán giao thức theo tiền tố key
+                    protocol = providers.ANTHROPIC if api_key.lower().startswith("sk-ant-") else providers.OPENAI
+                    chosen, base_used, models_path = "custom", raw_base, "/v1/models"
+                    verify_ok, verify_msg, detected_by = False, err, "key"
+            if chosen is None:
+                json_response(self, 400, {"error":{
+                    "message":"chua nhan ra nha cung cap - dan them base URL hoac chon nha cung cap",
+                    "type":"invalid_request"}})
+                return
+
+        # 4. lưu địa chỉ/giao thức
+        if chosen == "custom":
+            db.update_provider("custom", base_url=base_used, protocol=protocol,
+                               chat_path="/v1/chat/completions", messages_path="/v1/messages",
+                               models_path=models_path or "/v1/models", enabled=1)
+        elif raw_base:
+            db.set_provider_base_url(chosen, raw_base)
+        spec = providers.spec(chosen) or {}
+
+        # 5. lưu key (cùng key thì dùng lại, không tạo trùng)
+        c = db.conn()
+        row = c.execute("SELECT id FROM api_keys WHERE provider=? AND key_value=?", (chosen, api_key)).fetchone()
+        c.close()
+        if row is not None:
+            key_id = row["id"]
+            keypool.set_enabled(key_id, True)
+        else:
+            key_id = keypool.add_key(chosen, j.get("label") or (spec["label"] + " key"), api_key, 0)
+
+        # 6. model: dò được thì dùng, không thì dùng danh sách mặc định của nhà cung cấp
+        fo = j.get("free_only")
+        if fo is not None:
+            db.set_setting("free_models_only",
+                           "1" if (fo is True or str(fo).lower() in ("1", "true", "yes", "on")) else "0")
+        model_ids = list(ids) or list(spec.get("default_models") or [])
+        if model_ids:
+            db.upsert_models(chosen, model_ids)
+        db.recompute_model_flags()
+        db.apply_models_policy(chosen)
+
+        # 7. client key: luôn cấp một key mới để dán vào app ngay
+        c = db.conn()
+        n = c.execute("SELECT COUNT(*) FROM client_keys WHERE enabled=1").fetchone()[0]
+        c.close()
+        _, raw_client_key = db.new_client_key(spec["label"] + " · thiết lập")
+        db.set_setting("last_provider", chosen)
+
+        # 8. model mặc định để client không cần gửi tên model
+        models = [{"id": r["id"], "free": bool(r["is_free"])}
+                  for r in db.list_models(enabled_only=True) if r["provider"] == chosen]
+        default_model = db.get_setting("default_model", "") or ""
+        ids_on = [m["id"] for m in models]
+        if ids_on and (default_model not in ids_on or not chat_model(default_model)):
+            chat = [i for i in ids_on if chat_model(i)]
+            default_model = (chat or ids_on)[0]
+            db.set_setting("default_model", default_model)
+
+        host = db.get_setting("host", "127.0.0.1")
+        port = db.get_setting("port", "15199")
+        json_response(self, 200, {
+            "ok": True, "provider": chosen, "label": spec["label"], "base_url": spec.get("base_url"),
+            "protocol": spec.get("protocol"), "detected_by": detected_by,
+            "models_path": spec.get("models_path"), "default_model": default_model,
+            "verify_ok": verify_ok, "verify_error": verify_msg,
+            "key_id": key_id, "models": models,
+            "free_only": db.get_setting("free_models_only", "1") == "1",
+            "client_key": raw_client_key, "has_client_key": n > 0,
+            "openai_base_url": "http://%s:%s/v1" % (host, port),
+            "anthropic_base_url": "http://%s:%s" % (host, port),
+        })
+
 
     # ---- gateway management ----
     def _require_mgmt_auth(self):
@@ -415,6 +705,17 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             c.close()
             json_response(self, 200, {"client_keys": [dict(r) for r in rows]})
             return
+        if path == "/gateway/providers":
+            c = db.conn()
+            n = c.execute("SELECT COUNT(*) FROM client_keys WHERE enabled=1").fetchone()[0]
+            c.close()
+            json_response(self, 200, {
+                "providers": db.list_providers(),
+                "free_only": db.get_setting("free_models_only", "1") == "1",
+                "client_keys": n,
+                "last_provider": db.get_setting("last_provider", ""),
+            })
+            return
         json_response(self, 404, {"error":{"message":"not found"}})
 
     def _gateway_post(self, path):
@@ -428,8 +729,17 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             json_response(self, 400, {"error":{"message":"invalid json"}})
             return
         if path == "/gateway/keys":
-            kid = keypool.add_key(j.get("provider","openai"), j.get("label",""), j.get("key",""), int(j.get("priority",0)))
-            json_response(self, 200, {"id": kid})
+            name = providers.canonical(j.get("provider","openai")) or j.get("provider","openai")
+            kid = keypool.add_key(name, j.get("label",""), j.get("key",""), int(j.get("priority",0)))
+            # dò model ngay để model của nhà cung cấp này hiện ra được
+            found = None
+            if db.get_setting("auto_discover_models", "1") == "1":
+                ok, ids, err = proxy.discover_models(name)
+                if ok and ids:
+                    db.upsert_models(name, ids)
+                    db.recompute_model_flags()
+                    found = db.apply_models_policy(name)
+            json_response(self, 200, {"id": kid, "models": found})
             return
         if path == "/gateway/client-keys":
             name = j.get("name", "default")
@@ -440,6 +750,29 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             for k,v in j.items():
                 db.set_setting(k, v)
             json_response(self, 200, {"ok": True})
+            return
+        if path == "/gateway/providers/discover":
+            name = providers.canonical(j.get("provider"))
+            if name is None:
+                json_response(self, 400, {"error":{"message":"provider khong hop le"}})
+                return
+            ok, ids, err = proxy.discover_models(name)
+            if not ok:
+                json_response(self, 502, {"error":{"message":err,"type":"upstream_error"}})
+                return
+            db.upsert_models(name, ids)
+            db.recompute_model_flags()
+            json_response(self, 200, {"ok": True, "found": len(ids), "enabled": db.apply_models_policy()})
+            return
+        if path == "/gateway/providers/base-url":
+            ok = db.set_provider_base_url(j.get("provider"), j.get("base_url"))
+            json_response(self, 200 if ok else 400, {"ok": ok})
+            return
+        if path == "/gateway/models/policy":
+            free_only = bool(j.get("free_only", True))
+            db.set_setting("free_models_only", "1" if free_only else "0")
+            json_response(self, 200, {"ok": True, "free_only": free_only,
+                                      "enabled": db.apply_models_policy()})
             return
         json_response(self, 404, {"error":{"message":"not found"}})
 
