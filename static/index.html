@@ -2,7 +2,9 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Gateway</title>
 <style>
 :root{
@@ -10,51 +12,65 @@
   --border:#2a3040;--text:#e8ecf4;--muted:#8a93a6;--accent:#6c8cff;
   --accent2:#8b5cf6;--ok:#22c55e;--danger:#ef4444;--warn:#f59e0b;
 }
-*{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(1200px 600px at 10% -10%,#1a2340 0%,transparent 60%),radial-gradient(900px 500px at 100% 0%,#2a1a40 0%,transparent 55%),var(--bg);color:var(--text);min-height:100vh}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:16px;background:radial-gradient(1200px 600px at 10% -10%,#1a2340 0%,transparent 60%),radial-gradient(900px 500px at 100% 0%,#2a1a40 0%,transparent 55%),var(--bg);color:var(--text);min-height:100vh;line-height:1.45}
 a{color:var(--accent)}
-header{position:sticky;top:0;z-index:10;padding:14px 24px;background:rgba(11,13,18,.7);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
-header h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.2px}
+header{position:sticky;top:0;z-index:10;padding:12px 16px;background:rgba(11,13,18,.78);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.2px}
 header .pill{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:4px 10px;border-radius:999px}
-main{padding:20px;max-width:1200px;margin:0 auto}
-.card{background:linear-gradient(180deg,rgba(255,255,255,.03),transparent),var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);animation:fadeUp .35s ease}
+main{padding:16px;max-width:1200px;margin:0 auto}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.03),transparent),var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);animation:fadeUp .35s ease}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.grid{display:grid;gap:12px}
-.grid-2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;gap:10px}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
-input,select,textarea{background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px;width:100%;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+input,select,textarea{
+  background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:10px;
+  padding:12px 12px;width:100%;box-sizing:border-box;font-size:16px;min-height:44px;
+  transition:border-color .15s,box-shadow .15s;appearance:none;-webkit-appearance:none
+}
+select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) calc(50% - 3px),calc(100% - 13px) calc(50% - 3px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:34px}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,140,255,.18)}
-button{border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600;transition:transform .12s,filter .12s,background .15s}
+button{border:none;border-radius:10px;padding:12px 14px;cursor:pointer;font-weight:600;font-size:16px;min-height:44px;touch-action:manipulation;transition:transform .12s,filter .12s,background .15s}
 button:active{transform:scale(.97)}
 button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
 button.ghost{background:var(--card2);color:var(--text);border:1px solid var(--border)}
 button.danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
-button.sm{padding:6px 10px;font-size:12px;border-radius:8px}
-nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
-nav button{background:var(--card2);color:var(--muted);border:1px solid var(--border);padding:8px 14px;border-radius:999px;font-weight:500}
+button.sm{padding:8px 12px;font-size:13px;min-height:36px;border-radius:8px}
+nav{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+nav button{background:var(--card2);color:var(--muted);border:1px solid var(--border);padding:10px 12px;border-radius:999px;font-weight:500;font-size:14px;min-height:40px}
 nav button.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
 .section{display:none;animation:fadeUp .3s ease}
 .section.active{display:block}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
-th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:480px}
+th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
 .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
 .badge.ok{background:rgba(34,197,94,.15);color:var(--ok)}
 .badge.off{background:rgba(239,68,68,.15);color:var(--danger)}
 pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-size:12px;margin:0}
 .muted{color:var(--muted);font-size:13px}
-.copy{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--bg2);padding:8px 10px;border-radius:8px;border:1px solid var(--border);word-break:break-all}
-.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);padding:12px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(10px);transition:.25s;z-index:50}
+.copy{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--bg2);padding:10px 12px;border-radius:10px;border:1px solid var(--border);word-break:break-all;min-height:44px;display:flex;align-items:center}
+.toast{position:fixed;bottom:16px;right:16px;left:16px;max-width:420px;margin:0 auto;background:var(--card);border:1px solid var(--border);padding:12px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(10px);transition:.25s;z-index:50;text-align:center}
 .toast.show{opacity:1;transform:none}
-.login{max-width:520px;margin:40px auto}
-.profile{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--card2);margin-bottom:8px}
-.profile .name{flex:1;font-weight:600}
+.login{max-width:520px;margin:24px auto}
+.profile{display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--card2);margin-bottom:8px;flex-wrap:wrap}
+.profile .name{flex:1;font-weight:600;min-width:80px}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (max-width:640px){
-  header{padding:12px 16px} main{padding:14px}
-  nav button{padding:6px 10px;font-size:12px}
+  main{padding:12px}
+  header{padding:10px 12px}
+  .grid,.grid-2{grid-template-columns:1fr}
+  nav{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+  nav button{flex:0 0 auto}
+  .row{gap:8px}
+  table{min-width:100%}
+  th,td{white-space:normal}
 }
 </style>
 </head>
@@ -68,7 +84,6 @@ pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-siz
 </header>
 <main>
 
-<!-- LOGIN -->
 <div id="loginView" class="login card">
   <h2 style="margin-top:0">Đăng nhập</h2>
   <p class="muted">Nhập client key để quản lý gateway. Có thể lưu nhiều profile để đăng nhập nhanh.</p>
@@ -84,7 +99,6 @@ pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-siz
   <p class="muted" style="margin-top:12px">Mẹo: mở URL <code>?key=YOUR_KEY</code> để tự đăng nhập.</p>
 </div>
 
-<!-- APP -->
 <div id="appView" style="display:none">
   <nav>
     <button onclick="show('dashboard')" id="tab-dashboard" class="active">Dashboard</button>
@@ -99,9 +113,7 @@ pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-siz
     <div class="grid grid-2">
       <div class="card"><h3>Trạng thái</h3><pre id="statusBox">...</pre></div>
       <div class="card"><h3>Thao tác nhanh</h3>
-        <div class="row">
-          <button class="ghost" onclick="loadStatus()">Refresh</button>
-        </div>
+        <div class="row"><button class="ghost" onclick="loadStatus()">Refresh</button></div>
         <p class="muted" style="margin-top:10px">Gateway chạy local. Port & host cấu hình trong Settings.</p>
       </div>
     </div>
@@ -119,17 +131,17 @@ pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-siz
       </div>
       <div style="margin-top:12px"><button class="primary" onclick="addKey()">Thêm key</button></div>
     </div>
-    <div class="card"><h3>Danh sách keys</h3><div id="keysTable"></div></div>
+    <div class="card"><h3>Danh sách keys</h3><div class="table-wrap" id="keysTable"></div></div>
   </div>
 
   <div id="models" class="section">
-    <div class="card"><h3>Models (chỉ enabled xuất hiện ở /v1/models)</h3><div id="modelsTable"></div></div>
+    <div class="card"><h3>Models (chỉ enabled xuất hiện ở /v1/models)</h3><div class="table-wrap" id="modelsTable"></div></div>
   </div>
 
   <div id="logs" class="section">
     <div class="card"><h3>Recent logs</h3>
       <div class="row"><button class="ghost" onclick="loadLogs()">Refresh</button><input id="logLimit" value="100" style="width:90px"></div>
-      <div id="logsTable" style="margin-top:12px"></div>
+      <div class="table-wrap" id="logsTable" style="margin-top:12px"></div>
     </div>
   </div>
 
@@ -137,7 +149,7 @@ pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-siz
     <div class="card"><h3>Settings</h3><div id="settingsForm"></div><div style="margin-top:12px"><button class="primary" onclick="saveSettings()">Lưu</button></div></div>
     <div class="card"><h3>Client keys</h3>
       <div class="row"><input id="newClientName" placeholder="name"><button class="primary" onclick="addClientKey()">Tạo client key</button></div>
-      <div id="clientKeysTable" style="margin-top:12px"></div>
+      <div class="table-wrap" id="clientKeysTable" style="margin-top:12px"></div>
       <pre id="newClientKeyOut" style="margin-top:12px;display:none"></pre>
     </div>
   </div>
@@ -166,13 +178,12 @@ pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-siz
 
 <script>
 const $ = (id)=>document.getElementById(id);
-let BASE_URL = location.origin;
+let BASE_URL = "";
 let CLIENT_KEY = "";
 
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
 function setConn(ok){ $("connPill").textContent = ok?"online":"offline"; $("connPill").style.color = ok?"var(--ok)":"var(--danger)"; }
 
-// profiles
 function getProfiles(){ try{return JSON.parse(localStorage.getItem("gw_profiles")||"[]")}catch{return []} }
 function setProfiles(p){ localStorage.setItem("gw_profiles",JSON.stringify(p)); }
 function renderProfiles(){
@@ -205,7 +216,6 @@ function doLogin(){
   CLIENT_KEY = key;
   localStorage.setItem("gw_base_url", BASE_URL);
   localStorage.setItem("gw_client_key", CLIENT_KEY);
-  // if base url different from current origin, we still call it
   enterApp();
 }
 function logout(){ localStorage.removeItem("gw_client_key"); location.reload(); }
@@ -328,7 +338,6 @@ function enterApp(){
   setConn(true);
 }
 
-// auto login from URL ?key=
 (function(){
   const u=new URL(location.href);
   const k=u.searchParams.get("key");
