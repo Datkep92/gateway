@@ -66,11 +66,17 @@ pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-siz
   main{padding:12px}
   header{padding:10px 12px}
   .grid,.grid-2{grid-template-columns:1fr}
-  nav{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+  nav{flex-wrap:wrap;overflow:visible}
   nav button{flex:0 0 auto}
   .row{gap:8px}
-  table{min-width:100%}
-  th,td{white-space:normal}
+  .table-wrap{overflow:visible}
+  table,thead,tbody,tr,th,td{display:block;width:100%}
+  thead{display:none}
+  tr{margin-bottom:12px;border:1px solid var(--border);border-radius:12px;padding:8px 10px;background:var(--card2)}
+  td{border:none;padding:4px 0;white-space:normal;display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+  td::before{content:attr(data-label);font-weight:600;color:var(--muted);font-size:12px;flex:0 0 40%;max-width:120px}
+  td:last-child{justify-content:flex-end}
+  .row > button{flex:1 1 100%}
 }
 </style>
 </head>
@@ -249,7 +255,7 @@ async function loadKeys(){
     const d=await api("/gateway/keys");
     let html="<table><tr><th>Provider</th><th>Label</th><th>Prefix</th><th>Enabled</th><th>Failures</th><th></th></tr>";
     for(const k of d.keys){
-      html += `<tr><td>${k.provider}</td><td>${k.label}</td><td>${k.key_prefix}</td><td><span class="badge ${k.enabled?'ok':'off'}">${k.enabled}</span></td><td>${k.failure_count}</td><td><button class="danger sm" onclick="delKey('${k.id}')">Xóa</button></td></tr>`;
+      html += `<tr><td data-label="Provider">${k.provider}</td><td data-label="Label">${k.label}</td><td data-label="Prefix">${k.key_prefix}</td><td data-label="Enabled"><span class="badge ${k.enabled?'ok':'off'}">${k.enabled}</span></td><td data-label="Failures">${k.failure_count}</td><td data-label="Action"><button class="danger sm" onclick="delKey('${k.id}')">Xóa</button></td></tr>`;
     }
     html+="</table>";
     $("keysTable").innerHTML=html;
@@ -267,7 +273,7 @@ async function loadModels(){
     const d=await api("/gateway/models");
     let html="<table><tr><th>ID</th><th>Provider</th><th>Display</th><th>Enabled</th><th></th></tr>";
     for(const m of d.models){
-      html += `<tr><td>${m.id}</td><td>${m.provider}</td><td>${m.display_name}</td><td><span class="badge ${m.enabled?'ok':'off'}">${m.enabled}</span></td><td><button class="ghost sm" onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?'Tắt':'Bật'}</button></td></tr>`;
+      html += `<tr><td data-label="ID">${m.id}</td><td data-label="Provider">${m.provider}</td><td data-label="Display">${m.display_name}</td><td data-label="Enabled"><span class="badge ${m.enabled?'ok':'off'}">${m.enabled}</span></td><td data-label="Action"><button class="ghost sm" onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?'Tắt':'Bật'}</button></td></tr>`;
     }
     html+="</table>";
     $("modelsTable").innerHTML=html;
@@ -280,7 +286,7 @@ async function loadLogs(){
     const d=await api("/gateway/logs?limit="+limit);
     let html="<table><tr><th>Time</th><th>Provider</th><th>Model</th><th>Status</th><th>Latency</th><th>Stream</th></tr>";
     for(const l of d.logs){
-      html += `<tr><td>${new Date(l.timestamp*1000).toLocaleTimeString()}</td><td>${l.provider||''}</td><td>${l.model||''}</td><td>${l.status_code}</td><td>${l.latency_ms}ms</td><td>${l.stream}</td></tr>`;
+      html += `<tr><td data-label="Time">${new Date(l.timestamp*1000).toLocaleTimeString()}</td><td data-label="Provider">${l.provider||''}</td><td data-label="Model">${l.model||''}</td><td data-label="Status">${l.status_code}</td><td data-label="Latency">${l.latency_ms}ms</td><td data-label="Stream">${l.stream}</td></tr>`;
     }
     html+="</table>";
     $("logsTable").innerHTML=html;
@@ -298,7 +304,7 @@ async function loadSettings(){
     const ck=await api("/gateway/client-keys");
     let ckh="<table><tr><th>Name</th><th>Enabled</th><th>Created</th><th></th></tr>";
     for(const k of ck.client_keys){
-      ckh += `<tr><td>${k.name}</td><td>${k.enabled}</td><td>${new Date(k.created_at*1000).toLocaleString()}</td><td><button class="danger sm" onclick="delClientKey('${k.id}')">Xóa</button></td></tr>`;
+      ckh += `<tr><td data-label="Name">${k.name}</td><td data-label="Enabled">${k.enabled}</td><td data-label="Created">${new Date(k.created_at*1000).toLocaleString()}</td><td data-label="Action"><button class="danger sm" onclick="delClientKey('${k.id}')">Xóa</button></td></tr>`;
     }
     ckh+="</table>";
     $("clientKeysTable").innerHTML=ckh;
