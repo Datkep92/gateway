@@ -2,182 +2,422 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0d12">
 <title>Gateway</title>
 <style>
 :root{
-  --bg:#0b0d12;--bg2:#12151d;--card:#171b24;--card2:#1f2430;
-  --border:#2a3040;--text:#e8ecf4;--muted:#8a93a6;--accent:#6c8cff;
-  --accent2:#8b5cf6;--ok:#22c55e;--danger:#ef4444;--warn:#f59e0b;
+  --bg:#0a0c11;--bg2:#101319;--card:#151922;--card2:#1b212c;--elev:#212836;
+  --border:#252c3a;--border2:#333c4e;--text:#eaeef7;--muted:#8a93a6;--muted2:#6b7488;
+  --accent:#6c8cff;--accent2:#a855f7;--ok:#22c55e;--danger:#ef4444;--warn:#f59e0b;
+  --shadow:0 18px 40px -20px rgba(0,0,0,.8);
+  --r:16px;--r2:12px;
+  --grad:linear-gradient(135deg,var(--accent),var(--accent2));
+}
+html[data-theme="light"]{
+  --bg:#f4f6fb;--bg2:#eef1f8;--card:#ffffff;--card2:#f7f9fd;--elev:#ffffff;
+  --border:#e2e7f1;--border2:#cfd7e6;--text:#101625;--muted:#66708a;--muted2:#8b94a8;
+  --shadow:0 18px 40px -24px rgba(20,30,60,.35);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;height:100%}
 html{-webkit-text-size-adjust:100%}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:16px;background:radial-gradient(1200px 600px at 10% -10%,#1a2340 0%,transparent 60%),radial-gradient(900px 500px at 100% 0%,#2a1a40 0%,transparent 55%),var(--bg);color:var(--text);min-height:100vh;line-height:1.45}
-a{color:var(--accent)}
-header{position:sticky;top:0;z-index:10;padding:12px 16px;background:rgba(11,13,18,.78);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
-header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.2px}
-header .pill{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:4px 10px;border-radius:999px}
-main{padding:16px;max-width:1200px;margin:0 auto}
-.card{background:linear-gradient(180deg,rgba(255,255,255,.03),transparent),var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);animation:fadeUp .35s ease}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.grid{display:grid;gap:10px}
-.grid-2{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
-label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
-input,select,textarea{
-  background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:10px;
-  padding:12px 12px;width:100%;box-sizing:border-box;font-size:16px;min-height:44px;
-  transition:border-color .15s,box-shadow .15s;appearance:none;-webkit-appearance:none
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;
+  font-size:16px;line-height:1.45;color:var(--text);background:var(--bg);
+  overflow-x:hidden;overscroll-behavior-y:contain;
 }
-select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) calc(50% - 3px),calc(100% - 13px) calc(50% - 3px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:34px}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,140,255,.18)}
-button{border:none;border-radius:10px;padding:12px 14px;cursor:pointer;font-weight:600;font-size:16px;min-height:44px;touch-action:manipulation;transition:transform .12s,filter .12s,background .15s}
-button:active{transform:scale(.97)}
-button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
-button.ghost{background:var(--card2);color:var(--text);border:1px solid var(--border)}
-button.danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
-button.sm{padding:8px 12px;font-size:13px;min-height:36px;border-radius:8px}
-nav{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-nav button{background:var(--card2);color:var(--muted);border:1px solid var(--border);padding:10px 12px;border-radius:999px;font-weight:500;font-size:14px;min-height:40px}
-nav button.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
-.section{display:none;animation:fadeUp .3s ease}
-.section.active{display:block}
-.table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
-table{width:100%;border-collapse:collapse;font-size:13px;min-width:480px}
-th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
-th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
-.badge.ok{background:rgba(34,197,94,.15);color:var(--ok)}
-.badge.off{background:rgba(239,68,68,.15);color:var(--danger)}
-pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-size:12px;margin:0}
-.muted{color:var(--muted);font-size:13px}
-.copy{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--bg2);padding:10px 12px;border-radius:10px;border:1px solid var(--border);word-break:break-all;min-height:44px;display:flex;align-items:center}
-.toast{position:fixed;bottom:16px;right:16px;left:16px;max-width:420px;margin:0 auto;background:var(--card);border:1px solid var(--border);padding:12px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(10px);transition:.25s;z-index:50;text-align:center}
-.toast.show{opacity:1;transform:none}
-.login{max-width:520px;margin:24px auto}
-.profile{display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--card2);margin-bottom:8px;flex-wrap:wrap}
-.profile .name{flex:1;font-weight:600;min-width:80px}
-.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-@media (max-width:640px){
-  main{padding:12px}
-  header{padding:10px 12px}
-  .grid,.grid-2{grid-template-columns:1fr}
-  nav{flex-wrap:wrap;overflow:visible}
-  nav button{flex:0 0 auto}
-  .row{gap:8px}
-  .table-wrap{overflow:visible}
-  table,thead,tbody,tr,th,td{display:block;width:100%}
-  thead{display:none}
-  tr{margin-bottom:12px;border:1px solid var(--border);border-radius:12px;padding:8px 10px;background:var(--card2)}
-  td{border:none;padding:4px 0;white-space:normal;display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
-  td::before{content:attr(data-label);font-weight:600;color:var(--muted);font-size:12px;flex:0 0 40%;max-width:120px}
-  td:last-child{justify-content:flex-end}
-  .row > button{flex:1 1 100%}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(700px 420px at 8% -6%,rgba(108,140,255,.20),transparent 62%),
+    radial-gradient(600px 380px at 100% 0%,rgba(168,85,247,.16),transparent 58%),
+    radial-gradient(800px 500px at 50% 110%,rgba(34,197,94,.07),transparent 60%);
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:none;background:none;touch-action:manipulation}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* ---------- controls ---------- */
+input,select,textarea{
+  width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
+  padding:12px 14px;min-height:48px;font-size:16px;appearance:none;-webkit-appearance:none;
+  transition:border-color .16s,box-shadow .16s,background .16s;
+}
+textarea{min-height:96px;resize:vertical}
+input::placeholder{color:var(--muted2)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(108,140,255,.16)}
+select{
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 19px) calc(50% - 3px),calc(100% - 14px) calc(50% - 3px);
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:36px;
+}
+label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:0 0 6px 2px;letter-spacing:.01em}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:46px;padding:11px 18px;border-radius:var(--r2);font-weight:600;font-size:15px;
+  background:var(--card2);border:1px solid var(--border);
+  transition:transform .12s ease,background .16s,box-shadow .16s,opacity .16s;
+}
+.btn:hover{background:var(--elev);border-color:var(--border2)}
+.btn:active{transform:scale(.975)}
+.btn.primary{background:var(--grad);border-color:transparent;color:#fff;box-shadow:0 10px 24px -12px rgba(108,140,255,.9)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.35);color:#ff8b8b}
+.btn.danger:hover{background:rgba(239,68,68,.22)}
+.btn.sm{min-height:38px;padding:7px 13px;font-size:13.5px;border-radius:10px}
+.btn.block{width:100%}
+.btn[disabled]{opacity:.5;pointer-events:none}
+
+.switch{position:relative;flex:0 0 auto;width:48px;height:29px;border-radius:999px;background:var(--border);transition:background .22s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:23px;height:23px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:transform .22s ease}
+.switch.on{background:var(--grad)}
+.switch.on::after{transform:translateX(19px)}
+
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.badge.ok{background:rgba(34,197,94,.15);color:#4ade80}
+.badge.off{background:rgba(239,68,68,.14);color:#ff8b8b}
+.badge.neutral{background:var(--card2);color:var(--muted)}
+html[data-theme="light"] .badge.ok{color:#15803d}
+html[data-theme="light"] .badge.off{color:#b91c1c}
+
+/* ---------- login ---------- */
+.login-screen{position:relative;z-index:1;min-height:100%;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-card{
+  width:100%;max-width:520px;background:var(--card);border:1px solid var(--border);border-radius:22px;
+  padding:26px 22px;box-shadow:var(--shadow);animation:rise .45s cubic-bezier(.2,.8,.2,1);
+}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.logo{width:46px;height:46px;flex:0 0 auto;border-radius:14px;background:var(--grad);display:grid;place-items:center;font-size:22px;box-shadow:0 12px 26px -14px rgba(108,140,255,.95)}
+.brand h1{font-size:20px}
+.brand p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.hint{font-size:12.5px;color:var(--muted);margin:10px 2px 0}
+
+/* ---------- app shell ---------- */
+.app{position:relative;z-index:1;display:none;min-height:100%}
+.app.ready{display:block}
+.sidebar{display:none}
+.topbar{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.6) blur(16px);
+  -webkit-backdrop-filter:saturate(1.6) blur(16px);border-bottom:1px solid var(--border);
+}
+.topbar .title{font-size:17px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iconbtn{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--card2);border:1px solid var(--border);font-size:17px;transition:background .16s,transform .12s}
+.iconbtn:active{transform:scale(.94)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);background:var(--card2);border:1px solid var(--border);padding:6px 11px;border-radius:999px;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--danger);transition:background .2s}
+.dot.on{background:var(--ok);box-shadow:0 0 0 4px rgba(34,197,94,.16)}
+
+.content{
+  padding:16px;padding-bottom:calc(96px + env(safe-area-inset-bottom));
+  max-width:1180px;margin:0 auto;
+}
+.section{display:none}
+.section.active{display:block;animation:rise .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+.page-head{margin:2px 2px 14px}
+.page-head h2{font-size:21px}
+.page-head p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  padding:18px;margin-bottom:14px;box-shadow:var(--shadow);
+}
+.card h3{font-size:15px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h3 .tag{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--muted)}
+.stack{display:grid;gap:12px}
+.grid2{display:grid;gap:12px;grid-template-columns:1fr}
+.actions{display:grid;gap:10px;grid-template-columns:1fr}
+
+/* stats */
+.stats{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:14px}
+.stat{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:15px;
+  position:relative;overflow:hidden;box-shadow:var(--shadow);animation:rise .4s backwards;
+}
+.stat::after{content:"";position:absolute;right:-30px;top:-30px;width:90px;height:90px;border-radius:50%;background:var(--grad);opacity:.14}
+.stat .k{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.stat .v{font-size:27px;font-weight:800;margin-top:6px;letter-spacing:-.02em}
+.stat .s{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* list items */
+.list{display:grid;gap:10px}
+.item{
+  background:var(--card2);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px;
+  display:grid;gap:10px;transition:border-color .16s,transform .12s;
+}
+.item:hover{border-color:var(--border2)}
+.item .top{display:flex;align-items:center;gap:10px;min-width:0}
+.item .name{font-weight:650;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .sub{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px}
+.kv .k{color:var(--muted);font-weight:600}
+.kv .v{text-align:right;overflow-wrap:anywhere}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.spread{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.rowflex{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px;font-size:12.5px;overflow:auto;max-height:340px;margin:0;color:var(--muted)}
+.copybox{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;overflow-wrap:anywhere;min-height:48px;display:flex;align-items:center}
+
+.empty{padding:26px 14px;text-align:center;color:var(--muted);font-size:13.5px}
+.empty .ico{font-size:30px;display:block;margin-bottom:8px;opacity:.7}
+
+.skel{height:64px;border-radius:var(--r2);background:linear-gradient(90deg,var(--card2) 25%,var(--elev) 37%,var(--card2) 63%);background-size:400% 100%;animation:shimmer 1.3s ease-in-out infinite}
+@keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+
+/* bottom nav (mobile) */
+.bottomnav{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(6,1fr);
+  background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);border-top:1px solid var(--border);
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+.bottomnav button{
+  display:grid;justify-items:center;gap:3px;padding:7px 2px;border-radius:12px;
+  font-size:10.5px;font-weight:600;color:var(--muted);transition:color .18s,background .18s,transform .12s;
+}
+.bottomnav button .ico{font-size:19px;line-height:1;transition:transform .18s}
+.bottomnav button.active{color:var(--text);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.bottomnav button.active .ico{transform:translateY(-1px) scale(1.08)}
+.bottomnav button:active{transform:scale(.94)}
+
+/* toast */
+.toast{
+  position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translate(-50%,14px);
+  z-index:60;max-width:min(92vw,420px);padding:12px 18px;border-radius:14px;
+  background:var(--elev);border:1px solid var(--border2);box-shadow:var(--shadow);
+  font-size:14px;font-weight:600;text-align:center;opacity:0;pointer-events:none;transition:opacity .24s,transform .24s;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* sticky save bar */
+.savebar{
+  position:fixed;left:0;right:0;bottom:calc(66px + env(safe-area-inset-bottom));z-index:25;
+  padding:10px 16px;background:color-mix(in srgb,var(--bg) 86%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--border);
+  display:none;
+}
+.savebar.show{display:block;animation:rise .25s}
+
+/* desktop */
+@media (min-width:900px){
+  .app.ready{display:grid;grid-template-columns:252px 1fr;min-height:100vh}
+  .sidebar{
+    display:flex;flex-direction:column;gap:6px;padding:20px 14px;border-right:1px solid var(--border);
+    background:color-mix(in srgb,var(--card) 55%,transparent);position:sticky;top:0;height:100vh;
+  }
+  .sidebar .brand{margin:0 6px 18px}
+  .sidebar .brand h1{font-size:18px}
+  .navbtn{
+    display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:12px;
+    font-size:14.5px;font-weight:600;color:var(--muted);transition:background .16s,color .16s,transform .12s;
+  }
+  .navbtn .ico{font-size:17px;width:22px;text-align:center}
+  .navbtn:hover{background:var(--card2);color:var(--text)}
+  .navbtn.active{background:var(--grad);color:#fff;box-shadow:0 10px 22px -14px rgba(108,140,255,.95)}
+  .navbtn:active{transform:scale(.98)}
+  .sidebar .spacer{flex:1}
+  .topbar{background:transparent;backdrop-filter:none;border-bottom:none;padding:22px 28px 4px;padding-top:22px}
+  .topbar .title{font-size:22px;font-weight:700}
+  .topbar .mobonly{display:none}
+  .content{padding:12px 28px 40px;max-width:1180px}
+  .bottomnav{display:none}
+  .savebar{position:static;display:none;padding:0;border:none;background:none;backdrop-filter:none}
+  .savebar.show{display:block;background:none}
+  .toast{bottom:26px}
+  .stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .actions{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  .content{padding-bottom:40px}
+}
+@media (min-width:1180px){
+  .stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media (max-width:420px){
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stat .v{font-size:24px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;transition-duration:.001ms !important}
 }
 </style>
 </head>
 <body>
-<header>
-  <h1>⚡ Gateway</h1>
-  <div class="row">
-    <span class="pill" id="connPill">offline</span>
-    <button class="ghost sm" onclick="logout()">Đăng xuất</button>
-  </div>
-</header>
-<main>
 
-<div id="loginView" class="login card">
-  <h2 style="margin-top:0">Đăng nhập</h2>
-  <p class="muted">Nhập client key để quản lý gateway. Có thể lưu nhiều profile để đăng nhập nhanh.</p>
-  <div class="grid">
-    <div><label>Base URL</label><input id="loginUrl" value=""></div>
-    <div><label>Client key</label><input id="loginKey" placeholder="uF9..."></div>
+<!-- ============ LOGIN ============ -->
+<div id="loginView" class="login-screen">
+  <div class="login-card">
+    <div class="brand">
+      <div class="logo">⚡</div>
+      <div>
+        <h1>Gateway</h1>
+        <p>Cổng API OpenAI / Anthropic · quản trị nội bộ</p>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div><label>Base URL</label><input id="loginUrl" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <div><label>Client key</label><input id="loginKey" placeholder="dán client key…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <button class="btn primary block" onclick="doLogin()">Đăng nhập</button>
+      <div class="actions">
+        <button class="btn" onclick="saveProfile()">＋ Lưu profile</button>
+        <button class="btn" onclick="clearKey()">Xóa key đã lưu</button>
+      </div>
+    </div>
+
+    <div id="profilesBox" style="margin-top:16px"></div>
+    <p class="hint">Mẹo: mở <span class="mono">?key=…</span> để tự đăng nhập.</p>
   </div>
-  <div class="row" style="margin-top:12px">
-    <button class="primary" onclick="doLogin()">Đăng nhập</button>
-    <button class="ghost" onclick="saveProfile()">Lưu profile</button>
-  </div>
-  <div id="profilesBox" style="margin-top:16px"></div>
-  <p class="muted" style="margin-top:12px">Mẹo: mở URL <code>?key=YOUR_KEY</code> để tự đăng nhập.</p>
 </div>
 
-<div id="appView" style="display:none">
-  <nav>
-    <button onclick="show('dashboard')" id="tab-dashboard" class="active">Dashboard</button>
-    <button onclick="show('keys')" id="tab-keys">Keys</button>
-    <button onclick="show('models')" id="tab-models">Models</button>
-    <button onclick="show('logs')" id="tab-logs">Logs</button>
-    <button onclick="show('settings')" id="tab-settings">Settings</button>
-    <button onclick="show('config')" id="tab-config">Config</button>
+<!-- ============ APP ============ -->
+<div id="appView" class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">⚡</div>
+      <div><h1>Gateway</h1><p style="margin:2px 0 0;font-size:12px;color:var(--muted)">Bảng điều khiển</p></div>
+    </div>
+    <button class="navbtn active" data-tab="dashboard" onclick="show('dashboard')"><span class="ico">📊</span> Tổng quan</button>
+    <button class="navbtn" data-tab="keys" onclick="show('keys')"><span class="ico">🔑</span> API keys</button>
+    <button class="navbtn" data-tab="models" onclick="show('models')"><span class="ico">🧠</span> Models</button>
+    <button class="navbtn" data-tab="logs" onclick="show('logs')"><span class="ico">📄</span> Logs</button>
+    <button class="navbtn" data-tab="settings" onclick="show('settings')"><span class="ico">⚙️</span> Cài đặt</button>
+    <button class="navbtn" data-tab="config" onclick="show('config')"><span class="ico">🔌</span> Kết nối</button>
+    <div class="spacer"></div>
+    <button class="navbtn" onclick="toggleTheme()"><span class="ico" id="themeIco">🌙</span> <span id="themeLbl">Theme tối</span></button>
+    <button class="navbtn" onclick="logout()"><span class="ico">🚪</span> Đăng xuất</button>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="title" id="pageTitle">Tổng quan</div>
+      <span class="pill"><span class="dot" id="connDot"></span><span id="connTxt">offline</span></span>
+      <button class="iconbtn mobonly" onclick="toggleTheme()" id="themeIcoM">🌙</button>
+      <button class="iconbtn mobonly" onclick="logout()">🚪</button>
+    </header>
+
+    <div class="content">
+
+      <!-- dashboard -->
+      <section id="dashboard" class="section active">
+        <div class="page-head"><h2>Tổng quan</h2><p>Trạng thái cổng, số liệu nhanh và thao tác thường dùng.</p></div>
+        <div class="stats" id="statBox"></div>
+        <div class="grid2">
+          <div class="card">
+            <h3>⚡ Thao tác nhanh</h3>
+            <div class="actions">
+              <button class="btn" onclick="loadDashboard()">↻ Làm mới</button>
+              <button class="btn" onclick="copyValue(BASE_URL,'Base URL')">📋 Copy Base URL</button>
+              <button class="btn" onclick="testModels()">🧪 Test /v1/models</button>
+              <button class="btn" onclick="show('keys')">🔑 Quản lý key</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>🖥 Thông tin hệ thống <span class="tag" id="statusTag"></span></h3>
+            <pre class="box" id="statusBox">Đang tải…</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- keys -->
+      <section id="keys" class="section">
+        <div class="page-head"><h2>API keys upstream</h2><p>Key dùng để gọi OpenAI / Anthropic. Key được lưu trên máy này.</p></div>
+        <div class="card">
+          <h3>＋ Thêm key mới</h3>
+          <div class="grid2">
+            <div><label>Provider</label><select id="newProvider"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select></div>
+            <div><label>Label</label><input id="newLabel" placeholder="ví dụ: acc chính"></div>
+            <div><label>API key</label><input id="newKey" placeholder="sk-…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+            <div><label>Priority (số nhỏ ưu tiên trước)</label><input id="newPriority" type="number" value="0" inputmode="numeric"></div>
+          </div>
+          <button class="btn primary block" style="margin-top:12px" onclick="addKey()">Thêm key</button>
+        </div>
+        <div class="card">
+          <h3>🔑 Danh sách key <span class="tag" id="keysCount"></span></h3>
+          <div id="keysList" class="list"></div>
+        </div>
+      </section>
+
+      <!-- models -->
+      <section id="models" class="section">
+        <div class="page-head"><h2>Models</h2><p>Chỉ model đang bật mới xuất hiện ở <span class="mono">/v1/models</span>.</p></div>
+        <div class="card">
+          <h3>🧠 Danh sách model <span class="tag" id="modelsCount"></span></h3>
+          <div id="modelsList" class="list"></div>
+        </div>
+      </section>
+
+      <!-- logs -->
+      <section id="logs" class="section">
+        <div class="page-head"><h2>Logs</h2><p>Lịch sử request gần đây qua cổng.</p></div>
+        <div class="card">
+          <h3>📄 Request gần đây</h3>
+          <div class="grid2">
+            <div><label>Số dòng</label><input id="logLimit" type="number" value="100" inputmode="numeric"></div>
+            <div><label>Lọc theo model (tuỳ chọn)</label><input id="logFilter" placeholder="gpt-4…" oninput="renderLogs()"></div>
+          </div>
+          <button class="btn primary block" style="margin-top:12px" onclick="loadLogs()">Tải logs</button>
+        </div>
+        <div class="card"><div id="logsList" class="list"></div></div>
+      </section>
+
+      <!-- settings -->
+      <section id="settings" class="section">
+        <div class="page-head"><h2>Cài đặt</h2><p>Cấu hình cổng và client key dùng để truy cập.</p></div>
+        <div class="card">
+          <h3>⚙️ Cấu hình gateway</h3>
+          <div id="settingsForm" class="stack"></div>
+        </div>
+        <div class="savebar show" id="settingsSave"><button class="btn primary block" onclick="saveSettings()">💾 Lưu cài đặt</button></div>
+
+        <div class="card">
+          <h3>🔐 Client keys <span class="tag" id="clientCount"></span></h3>
+          <div class="grid2">
+            <div><label>Tên key mới</label><input id="newClientName" placeholder="ví dụ: iPhone"></div>
+            <div style="display:flex;align-items:flex-end"><button class="btn primary block" onclick="addClientKey()">＋ Tạo client key</button></div>
+          </div>
+          <div id="newClientKeyOut" class="copybox" style="margin-top:12px;display:none"></div>
+          <div id="clientKeysList" class="list" style="margin-top:12px"></div>
+        </div>
+      </section>
+
+      <!-- config -->
+      <section id="config" class="section">
+        <div class="page-head"><h2>Kết nối</h2><p>Dán các giá trị này vào app hoặc script của bạn.</p></div>
+        <div class="card">
+          <h3>🔌 Thông số kết nối</h3>
+          <div class="stack">
+            <div><label>Base URL</label><div class="copybox" id="cfgBase"></div><button class="btn sm" style="margin-top:8px" onclick="copyValue(BASE_URL,'Base URL')">📋 Copy</button></div>
+            <div><label>Client key</label><div class="copybox" id="cfgKey"></div><button class="btn sm" style="margin-top:8px" onclick="copyValue(CLIENT_KEY,'Client key')">📋 Copy</button></div>
+            <div><label>Endpoint OpenAI</label><div class="copybox" id="cfgOpenAI"></div><button class="btn sm" style="margin-top:8px" onclick="copyValue(BASE_URL+'/v1','Endpoint OpenAI')">📋 Copy</button></div>
+            <div><label>Endpoint Anthropic</label><div class="copybox" id="cfgAnth"></div><button class="btn sm" style="margin-top:8px" onclick="copyValue(BASE_URL+'/v1','Endpoint Anthropic')">📋 Copy</button></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>🧩 Ví dụ cURL</h3>
+          <pre class="box" id="curlBox"></pre>
+          <button class="btn sm" style="margin-top:10px" onclick="copyValue($('curlBox').textContent,'cURL')">📋 Copy cURL</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <nav class="bottomnav">
+    <button class="active" data-tab="dashboard" onclick="show('dashboard')"><span class="ico">📊</span>Tổng quan</button>
+    <button data-tab="keys" onclick="show('keys')"><span class="ico">🔑</span>Keys</button>
+    <button data-tab="models" onclick="show('models')"><span class="ico">🧠</span>Models</button>
+    <button data-tab="logs" onclick="show('logs')"><span class="ico">📄</span>Logs</button>
+    <button data-tab="settings" onclick="show('settings')"><span class="ico">⚙️</span>Cài đặt</button>
+    <button data-tab="config" onclick="show('config')"><span class="ico">🔌</span>Kết nối</button>
   </nav>
-
-  <div id="dashboard" class="section active">
-    <div class="grid grid-2">
-      <div class="card"><h3>Trạng thái</h3><pre id="statusBox">...</pre></div>
-      <div class="card"><h3>Thao tác nhanh</h3>
-        <div class="row"><button class="ghost" onclick="loadStatus()">Refresh</button></div>
-        <p class="muted" style="margin-top:10px">Gateway chạy local. Port & host cấu hình trong Settings.</p>
-      </div>
-    </div>
-  </div>
-
-  <div id="keys" class="section">
-    <div class="card">
-      <h3>Thêm API key upstream</h3>
-      <div class="grid grid-2">
-        <div><label>Provider</label>
-          <select id="newProvider"><option value="openai">openai</option><option value="anthropic">anthropic</option></select></div>
-        <div><label>Label</label><input id="newLabel" placeholder="label"></div>
-        <div><label>Key</label><input id="newKey" placeholder="sk-..."></div>
-        <div><label>Priority</label><input id="newPriority" type="number" value="0"></div>
-      </div>
-      <div style="margin-top:12px"><button class="primary" onclick="addKey()">Thêm key</button></div>
-    </div>
-    <div class="card"><h3>Danh sách keys</h3><div class="table-wrap" id="keysTable"></div></div>
-  </div>
-
-  <div id="models" class="section">
-    <div class="card"><h3>Models (chỉ enabled xuất hiện ở /v1/models)</h3><div class="table-wrap" id="modelsTable"></div></div>
-  </div>
-
-  <div id="logs" class="section">
-    <div class="card"><h3>Recent logs</h3>
-      <div class="row"><button class="ghost" onclick="loadLogs()">Refresh</button><input id="logLimit" value="100" style="width:90px"></div>
-      <div class="table-wrap" id="logsTable" style="margin-top:12px"></div>
-    </div>
-  </div>
-
-  <div id="settings" class="section">
-    <div class="card"><h3>Settings</h3><div id="settingsForm"></div><div style="margin-top:12px"><button class="primary" onclick="saveSettings()">Lưu</button></div></div>
-    <div class="card"><h3>Client keys</h3>
-      <div class="row"><input id="newClientName" placeholder="name"><button class="primary" onclick="addClientKey()">Tạo client key</button></div>
-      <div class="table-wrap" id="clientKeysTable" style="margin-top:12px"></div>
-      <pre id="newClientKeyOut" style="margin-top:12px;display:none"></pre>
-    </div>
-  </div>
-
-  <div id="config" class="section">
-    <div class="card">
-      <h3>Cấu hình cho ứng dụng</h3>
-      <p class="muted">Copy base URL và key vào app/script của bạn.</p>
-      <div class="grid">
-        <div><label>Base URL</label><div class="copy" id="cfgBase"></div></div>
-        <div><label>Client key</label><div class="copy" id="cfgKey"></div></div>
-        <div><label>OpenAI-compatible endpoint</label><div class="copy" id="cfgOpenAI"></div></div>
-        <div><label>Anthropic endpoint</label><div class="copy" id="cfgAnth"></div></div>
-      </div>
-      <div class="row" style="margin-top:12px">
-        <button class="ghost" onclick="copyText('cfgBase')">Copy Base URL</button>
-        <button class="ghost" onclick="copyText('cfgKey')">Copy Key</button>
-        <button class="ghost" onclick="copyText('cfgOpenAI')">Copy OpenAI URL</button>
-        <button class="ghost" onclick="copyText('cfgAnth')">Copy Anthropic URL</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -186,59 +426,111 @@ pre{background:var(--bg2);padding:12px;border-radius:10px;overflow:auto;font-siz
 const $ = (id)=>document.getElementById(id);
 let BASE_URL = "";
 let CLIENT_KEY = "";
+let LAST_LOGS = [];
+let CACHE = {keys:[],models:[],clientKeys:[]};
 
-function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
-function setConn(ok){ $("connPill").textContent = ok?"online":"offline"; $("connPill").style.color = ok?"var(--ok)":"var(--danger)"; }
+const TITLES = {dashboard:"Tổng quan",keys:"API keys",models:"Models",logs:"Logs",settings:"Cài đặt",config:"Kết nối"};
 
-function getProfiles(){ try{return JSON.parse(localStorage.getItem("gw_profiles")||"[]")}catch{return []} }
+/* ---------- utils ---------- */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+let toastTimer=null;
+function toast(msg){
+  const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2200);
+}
+function setConn(ok){
+  $("connDot").classList.toggle("on",!!ok);
+  $("connTxt").textContent = ok ? "online" : "offline";
+}
+function skeletons(el,n){
+  el.innerHTML = Array.from({length:n||3},()=>'<div class="skel"></div>').join("");
+}
+function emptyBox(ico,text){ return `<div class="empty"><span class="ico">${ico}</span>${esc(text)}</div>`; }
+
+function copyValue(text,label){
+  const done = ()=>toast("Đã copy "+(label||""));
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));
+  } else fallbackCopy(text,done);
+}
+function fallbackCopy(text,done){
+  try{
+    const ta=document.createElement("textarea");
+    ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select(); document.execCommand("copy");
+    document.body.removeChild(ta); done();
+  }catch(e){ toast("Copy thất bại"); }
+}
+
+/* ---------- theme ---------- */
+function applyTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  localStorage.setItem("gw_theme",t);
+  const ico = t==="light" ? "☀️" : "🌙";
+  const lbl = t==="light" ? "Theme sáng" : "Theme tối";
+  if($("themeIco")) $("themeIco").textContent=ico;
+  if($("themeLbl")) $("themeLbl").textContent=lbl;
+  if($("themeIcoM")) $("themeIcoM").textContent=ico;
+}
+function toggleTheme(){
+  applyTheme(document.documentElement.getAttribute("data-theme")==="light"?"dark":"light");
+}
+
+/* ---------- profiles ---------- */
+function getProfiles(){ try{return JSON.parse(localStorage.getItem("gw_profiles")||"[]")}catch(e){return []} }
 function setProfiles(p){ localStorage.setItem("gw_profiles",JSON.stringify(p)); }
 function renderProfiles(){
-  const box=$("profilesBox"); const ps=getProfiles();
-  if(!ps.length){ box.innerHTML="<p class='muted'>Chưa có profile nào.</p>"; return; }
-  box.innerHTML = ps.map((p,i)=>`
-    <div class="profile">
-      <div class="name">${p.name||"profile"}</div>
-      <div class="muted" style="font-size:11px">${p.url}</div>
-      <button class="ghost sm" onclick="quickLogin(${i})">Đăng nhập</button>
-      <button class="danger sm" onclick="delProfile(${i})">Xóa</button>
-    </div>`).join("");
+  const box=$("profilesBox"), ps=getProfiles();
+  if(!ps.length){ box.innerHTML=""; return; }
+  box.innerHTML = '<label>Profile đã lưu</label><div class="list">'+ps.map((p,i)=>`
+    <div class="item">
+      <div class="top"><div class="name">${esc(p.name||"profile")}</div>
+        <span class="badge neutral" style="margin-left:auto">${esc((p.url||"").replace(/^https?:\/\//,""))}</span></div>
+      <div class="rowflex">
+        <button class="btn sm" onclick="quickLogin(${i})">Đăng nhập</button>
+        <button class="btn sm danger" onclick="delProfile(${i})">Xóa</button>
+      </div>
+    </div>`).join("")+"</div>";
 }
 function saveProfile(){
   const url=$("loginUrl").value.trim()||location.origin;
   const key=$("loginKey").value.trim();
-  if(!key){ toast("Nhập key"); return; }
-  const name = prompt("Tên profile:", "default")||"default";
-  const ps=getProfiles(); ps.push({name,url,key}); setProfiles(ps);
+  if(!key){ toast("Nhập client key trước"); return; }
+  const name = prompt("Tên profile:","profile "+(getProfiles().length+1));
+  if(name===null) return;
+  const ps=getProfiles(); ps.push({name:name||"profile",url,key}); setProfiles(ps);
   renderProfiles(); toast("Đã lưu profile");
 }
 function delProfile(i){ const ps=getProfiles(); ps.splice(i,1); setProfiles(ps); renderProfiles(); }
 function quickLogin(i){ const p=getProfiles()[i]; $("loginUrl").value=p.url; $("loginKey").value=p.key; doLogin(); }
+function clearKey(){ localStorage.removeItem("gw_client_key"); localStorage.removeItem("gw_base_url"); $("loginKey").value=""; toast("Đã xóa key đã lưu"); }
 
+/* ---------- auth / api ---------- */
 function doLogin(){
-  const url=$("loginUrl").value.trim()||location.origin;
+  const url=($("loginUrl").value.trim()||location.origin).replace(/\/+$/,"");
   const key=$("loginKey").value.trim();
   if(!key){ toast("Nhập client key"); return; }
-  BASE_URL = url.replace(/\/$/,"");
-  CLIENT_KEY = key;
-  localStorage.setItem("gw_base_url", BASE_URL);
-  localStorage.setItem("gw_client_key", CLIENT_KEY);
+  BASE_URL=url; CLIENT_KEY=key;
+  localStorage.setItem("gw_base_url",BASE_URL);
+  localStorage.setItem("gw_client_key",CLIENT_KEY);
   enterApp();
 }
 function logout(){ localStorage.removeItem("gw_client_key"); location.reload(); }
 
 function hdr(){ return {"Content-Type":"application/json","Authorization":"Bearer "+CLIENT_KEY}; }
-async function api(path, opts={}){
-  const r = await fetch(BASE_URL+path, {headers: hdr(), ...opts});
-  if(!r.ok){ const t=await r.text(); throw new Error(r.status+" "+t); }
+async function api(path,opts){
+  const r = await fetch(BASE_URL+path, Object.assign({headers:hdr()},opts||{}));
+  if(!r.ok){ let t=""; try{t=await r.text()}catch(e){}; const e=new Error(r.status+" "+t); e.status=r.status; throw e; }
   return r.json();
 }
 
+/* ---------- navigation ---------- */
 function show(id){
-  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
-  document.getElementById("tab-"+id).classList.add("active");
-  if(id==="dashboard") loadStatus();
+  document.querySelectorAll(".section").forEach(s=>s.classList.toggle("active",s.id===id));
+  document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("active",b.dataset.tab===id));
+  if($("pageTitle")) $("pageTitle").textContent = TITLES[id]||"Gateway";
+  window.scrollTo({top:0,behavior:"smooth"});
+  if(id==="dashboard") loadDashboard();
   if(id==="keys") loadKeys();
   if(id==="models") loadModels();
   if(id==="logs") loadLogs();
@@ -246,122 +538,291 @@ function show(id){
   if(id==="config") loadConfig();
 }
 
-async function loadStatus(){
-  try{ const s=await api("/gateway/status"); $("statusBox").textContent=JSON.stringify(s,null,2); setConn(true);}
-  catch(e){ $("statusBox").textContent=e.message; setConn(false);}
-}
-async function loadKeys(){
+/* ---------- dashboard ---------- */
+async function loadDashboard(){
+  $("statBox").innerHTML = Array.from({length:4},()=>'<div class="stat"><div class="k">…</div><div class="v">–</div><div class="s"> </div></div>').join("");
   try{
-    const d=await api("/gateway/keys");
-    let html="<table><tr><th>Provider</th><th>Label</th><th>Prefix</th><th>Enabled</th><th>Failures</th><th></th></tr>";
-    for(const k of d.keys){
-      html += `<tr><td data-label="Provider">${k.provider}</td><td data-label="Label">${k.label}</td><td data-label="Prefix">${k.key_prefix}</td><td data-label="Enabled"><span class="badge ${k.enabled?'ok':'off'}">${k.enabled}</span></td><td data-label="Failures">${k.failure_count}</td><td data-label="Action"><button class="danger sm" onclick="delKey('${k.id}')">Xóa</button></td></tr>`;
-    }
-    html+="</table>";
-    $("keysTable").innerHTML=html;
-  }catch(e){ $("keysTable").innerHTML=e.message; }
+    const [st,keys,models,logs] = await Promise.all([
+      api("/gateway/status").catch(()=>null),
+      api("/gateway/keys").catch(()=>({keys:[]})),
+      api("/gateway/models").catch(()=>({models:[]})),
+      api("/gateway/logs?limit=200").catch(()=>({logs:[]}))
+    ]);
+    setConn(true);
+    CACHE.keys = keys.keys||[]; CACHE.models = models.models||[];
+    const kl=CACHE.keys, ml=CACHE.models, lg=logs.logs||[];
+    const okKeys = kl.filter(k=>k.enabled).length;
+    const okModels = ml.filter(m=>m.enabled).length;
+    const errs = lg.filter(l=>Number(l.status_code)>=400).length;
+    const avg = lg.length ? Math.round(lg.reduce((a,l)=>a+(Number(l.latency_ms)||0),0)/lg.length) : 0;
+    const stats=[
+      {k:"API keys",v:kl.length,s:`${okKeys} đang bật`},
+      {k:"Models",v:ml.length,s:`${okModels} đang bật`},
+      {k:"Request (200 gần nhất)",v:lg.length,s:`${errs} lỗi`},
+      {k:"Latency TB",v:avg+"ms",s:"trung bình gần đây"}
+    ];
+    $("statBox").innerHTML = stats.map((x,i)=>`<div class="stat" style="animation-delay:${i*60}ms"><div class="k">${esc(x.k)}</div><div class="v">${esc(x.v)}</div><div class="s">${esc(x.s)}</div></div>`).join("");
+    $("statusBox").textContent = st ? JSON.stringify(st,null,2) : "Không đọc được /gateway/status";
+    $("statusTag").textContent = st ? "OK" : "lỗi";
+  }catch(e){
+    setConn(false);
+    $("statusBox").textContent = "Lỗi: "+e.message;
+    $("statBox").innerHTML = emptyBox("⚠️","Không kết nối được gateway. Kiểm tra key hoặc server.");
+  }
+}
+async function testModels(){
+  try{
+    const r = await fetch(BASE_URL+"/v1/models",{headers:{"Authorization":"Bearer "+CLIENT_KEY}});
+    const t = await r.text();
+    toast(r.ok ? "OK "+r.status+" · "+t.slice(0,60) : "Lỗi "+r.status);
+  }catch(e){ toast("Lỗi: "+e.message); }
+}
+
+/* ---------- keys ---------- */
+async function loadKeys(){
+  const el=$("keysList"); skeletons(el,3);
+  try{
+    const d = await api("/gateway/keys");
+    CACHE.keys = d.keys||[];
+    $("keysCount").textContent = CACHE.keys.length+" key";
+    if(!CACHE.keys.length){ el.innerHTML = emptyBox("🔑","Chưa có key nào. Thêm key ở khung phía trên."); return; }
+    el.innerHTML = CACHE.keys.map(k=>`
+      <div class="item">
+        <div class="top">
+          <span class="badge neutral">${esc(k.provider)}</span>
+          <div class="name">${esc(k.label||"không tên")}</div>
+          <span class="badge ${k.enabled?'ok':'off'}" style="margin-left:auto">${k.enabled?"bật":"tắt"}</span>
+        </div>
+        <div class="mono">${esc(k.key_prefix)}…</div>
+        <div class="kv"><span class="k">Số lần lỗi</span><span class="v">${esc(k.failure_count)}</span></div>
+        <div class="rowflex">
+          <button class="btn sm" onclick="toggleKey('${k.id}',${!k.enabled})">${k.enabled?"Tắt":"Bật"}</button>
+          <button class="btn sm danger" onclick="delKey('${k.id}')">Xóa</button>
+        </div>
+      </div>`).join("");
+  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
 }
 async function addKey(){
-  const body={provider:$("newProvider").value,label:$("newLabel").value,key:$("newKey").value,priority:parseInt($("newPriority").value||"0")};
-  await api("/gateway/keys",{method:"POST",body:JSON.stringify(body)});
-  $("newLabel").value=""; $("newKey").value="";
-  toast("Đã thêm key"); loadKeys();
-}
-async function delKey(id){ await api("/gateway/keys/"+id,{method:"DELETE"}); toast("Đã xóa"); loadKeys(); }
-async function loadModels(){
+  if(!$("newKey").value.trim()){ toast("Nhập API key"); return; }
+  const body={provider:$("newProvider").value,label:$("newLabel").value.trim()||"key",key:$("newKey").value.trim(),priority:parseInt($("newPriority").value||"0",10)||0};
   try{
-    const d=await api("/gateway/models");
-    let html="<table><tr><th>ID</th><th>Provider</th><th>Display</th><th>Enabled</th><th></th></tr>";
-    for(const m of d.models){
-      html += `<tr><td data-label="ID">${m.id}</td><td data-label="Provider">${m.provider}</td><td data-label="Display">${m.display_name}</td><td data-label="Enabled"><span class="badge ${m.enabled?'ok':'off'}">${m.enabled}</span></td><td data-label="Action"><button class="ghost sm" onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?'Tắt':'Bật'}</button></td></tr>`;
-    }
-    html+="</table>";
-    $("modelsTable").innerHTML=html;
-  }catch(e){ $("modelsTable").innerHTML=e.message; }
+    await api("/gateway/keys",{method:"POST",body:JSON.stringify(body)});
+    $("newLabel").value=""; $("newKey").value=""; toast("Đã thêm key"); loadKeys();
+  }catch(e){ toast("Lỗi: "+e.message); }
 }
-async function toggleModel(id,enabled){ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); }
+async function toggleKey(id,enabled){
+  try{ await api("/gateway/keys/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadKeys(); }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
+async function delKey(id){
+  if(!confirm("Xóa key này?")) return;
+  try{ await api("/gateway/keys/"+id,{method:"DELETE"}); toast("Đã xóa key"); loadKeys(); }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
+
+/* ---------- models ---------- */
+async function loadModels(){
+  const el=$("modelsList"); skeletons(el,3);
+  try{
+    const d = await api("/gateway/models");
+    CACHE.models = d.models||[];
+    $("modelsCount").textContent = CACHE.models.length+" model";
+    if(!CACHE.models.length){ el.innerHTML = emptyBox("🧠","Chưa có model nào."); return; }
+    el.innerHTML = CACHE.models.map(m=>`
+      <div class="item">
+        <div class="top">
+          <span class="badge neutral">${esc(m.provider)}</span>
+          <div class="name">${esc(m.display_name||m.id)}</div>
+          <div class="switch ${m.enabled?'on':''}" style="margin-left:auto" onclick="toggleModel('${m.id}',${!m.enabled})"></div>
+        </div>
+        <div class="mono">${esc(m.id)}</div>
+      </div>`).join("");
+  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+}
+async function toggleModel(id,enabled){
+  try{ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
+
+/* ---------- logs ---------- */
 async function loadLogs(){
+  const el=$("logsList"); skeletons(el,4);
   try{
     const limit=$("logLimit").value||100;
-    const d=await api("/gateway/logs?limit="+limit);
-    let html="<table><tr><th>Time</th><th>Provider</th><th>Model</th><th>Status</th><th>Latency</th><th>Stream</th></tr>";
-    for(const l of d.logs){
-      html += `<tr><td data-label="Time">${new Date(l.timestamp*1000).toLocaleTimeString()}</td><td data-label="Provider">${l.provider||''}</td><td data-label="Model">${l.model||''}</td><td data-label="Status">${l.status_code}</td><td data-label="Latency">${l.latency_ms}ms</td><td data-label="Stream">${l.stream}</td></tr>`;
-    }
-    html+="</table>";
-    $("logsTable").innerHTML=html;
-  }catch(e){ $("logsTable").innerHTML=e.message; }
+    const d = await api("/gateway/logs?limit="+encodeURIComponent(limit));
+    LAST_LOGS = d.logs||[];
+    renderLogs();
+  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+}
+function renderLogs(){
+  const el=$("logsList");
+  const f=($("logFilter").value||"").toLowerCase();
+  const rows = LAST_LOGS.filter(l=>!f || String(l.model||"").toLowerCase().includes(f));
+  if(!rows.length){ el.innerHTML = emptyBox("📄", LAST_LOGS.length?"Không có dòng nào khớp lọc.":"Chưa có log."); return; }
+  el.innerHTML = rows.slice(0,300).map(l=>{
+    const code=Number(l.status_code)||0;
+    const cls = code>=400 ? "off" : (code>=200&&code<300 ? "ok" : "neutral");
+    return `<div class="item">
+      <div class="top">
+        <span class="badge ${cls}">${esc(code)}</span>
+        <div class="name">${esc(l.model||"không rõ model")}</div>
+        <span class="badge neutral" style="margin-left:auto">${l.stream?"stream":"thường"}</span>
+      </div>
+      <div class="kv"><span class="k">Provider</span><span class="v">${esc(l.provider||"–")}</span></div>
+      <div class="kv"><span class="k">Thời gian</span><span class="v">${esc(new Date((l.timestamp||0)*1000).toLocaleString())}</span></div>
+      <div class="kv"><span class="k">Độ trễ</span><span class="v">${esc(l.latency_ms)}ms</span></div>
+    </div>`;
+  }).join("");
+}
+
+/* ---------- settings ---------- */
+function prettyKey(k){
+  const map={
+    host:"Host (địa chỉ lắng nghe)",port:"Port",lan_enabled:"Cho phép truy cập LAN",
+    cors_enabled:"Bật CORS",tls_enabled:"Bật TLS",tls_mode:"Kiểu TLS",
+    tls_cert_path:"Đường dẫn cert",tls_key_path:"Đường dẫn key",
+    client_key_required:"Bắt buộc client key",rate_limit_enabled:"Bật giới hạn tốc độ",
+    rate_limit_rpm:"Giới hạn request/phút",rate_limit_burst:"Burst cho phép",
+    log_body_enabled:"Ghi nội dung request/response",log_retention_days:"Giữ log (ngày)",
+    max_log_count:"Số log tối đa",background:"Chạy nền"
+  };
+  return map[k] || k.replace(/_/g," ");
+}
+const BOOL_KEYS = new Set(["lan_enabled","cors_enabled","tls_enabled","client_key_required","rate_limit_enabled","log_body_enabled","background"]);
+const SELECT_KEYS = {tls_mode:[["none","Không dùng"],["selfsigned","Tự ký"],["imported","Cert có sẵn"]]};
+function fieldType(k,v){
+  if(BOOL_KEYS.has(k)) return "bool";
+  if(SELECT_KEYS[k]) return "select";
+  const s=String(v);
+  if(/^\d+$/.test(s)) return "number";
+  return "text";
 }
 async function loadSettings(){
+  const el=$("settingsForm"); el.innerHTML='<div class="skel" style="height:120px"></div>';
   try{
-    const d=await api("/gateway/settings");
-    const s=d.settings;
+    const d = await api("/gateway/settings");
+    const s = d.settings||{};
+    const groups = [
+      {t:"🌐 Mạng", keys:["host","port","lan_enabled","cors_enabled","tls_enabled","tls_mode","tls_cert_path","tls_key_path"]},
+      {t:"🔐 Bảo mật & giới hạn", keys:["client_key_required","rate_limit_enabled","rate_limit_rpm","rate_limit_burst"]},
+      {t:"📄 Log", keys:["log_body_enabled","log_retention_days","max_log_count"]},
+      {t:"🧩 Khác", keys:["background"]}
+    ];
+    const used=new Set();
     let html="";
-    for(const [k,v] of Object.entries(s)){
-      html += `<div style="margin-bottom:8px"><label>${k}</label><input name="${k}" value="${v}"></div>`;
+    groups.forEach(g=>{
+      const keys=g.keys.filter(k=>k in s);
+      if(!keys.length) return;
+      keys.forEach(k=>used.add(k));
+      html += `<div><label style="margin-bottom:8px">${g.t}</label><div class="stack">`+
+        keys.map(k=>fieldRow(k,s[k])).join("")+`</div></div>`;
+    });
+    const rest=Object.keys(s).filter(k=>!used.has(k));
+    if(rest.length){
+      html += `<div><label style="margin-bottom:8px">🧩 Khác</label><div class="stack">`+rest.map(k=>fieldRow(k,s[k])).join("")+`</div></div>`;
     }
-    $("settingsForm").innerHTML=html;
-    const ck=await api("/gateway/client-keys");
-    let ckh="<table><tr><th>Name</th><th>Enabled</th><th>Created</th><th></th></tr>";
-    for(const k of ck.client_keys){
-      ckh += `<tr><td data-label="Name">${k.name}</td><td data-label="Enabled">${k.enabled}</td><td data-label="Created">${new Date(k.created_at*1000).toLocaleString()}</td><td data-label="Action"><button class="danger sm" onclick="delClientKey('${k.id}')">Xóa</button></td></tr>`;
-    }
-    ckh+="</table>";
-    $("clientKeysTable").innerHTML=ckh;
-  }catch(e){ $("settingsForm").innerHTML=e.message; }
+    el.innerHTML = html || "<p class='hint'>Không có cài đặt nào.</p>";
+
+    const ck = await api("/gateway/client-keys").catch(()=>({client_keys:[]}));
+    CACHE.clientKeys = ck.client_keys||[];
+    $("clientCount").textContent = CACHE.clientKeys.length+" key";
+    const cel=$("clientKeysList");
+    cel.innerHTML = CACHE.clientKeys.length ? CACHE.clientKeys.map(k=>`
+      <div class="item">
+        <div class="top"><div class="name">${esc(k.name)}</div>
+          <span class="badge ${k.enabled?'ok':'off'}" style="margin-left:auto">${k.enabled?"bật":"tắt"}</span></div>
+        <div class="kv"><span class="k">Tạo lúc</span><span class="v">${esc(new Date((k.created_at||0)*1000).toLocaleString())}</span></div>
+        <div class="rowflex"><button class="btn sm danger" onclick="delClientKey('${k.id}')">Xóa</button></div>
+      </div>`).join("") : emptyBox("🔐","Chưa có client key nào.");
+  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+}
+function fieldRow(k,v){
+  const type=fieldType(k,v);
+  if(type==="bool"){
+    const on = String(v)==="1" || String(v).toLowerCase()==="true";
+    return `<div class="spread" style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+      <div><div style="font-weight:600;font-size:14px">${esc(prettyKey(k))}</div><div class="mono">${esc(k)}</div></div>
+      <div class="switch ${on?'on':''}" onclick="toggleSwitch(this)"></div>
+      <input type="hidden" name="${esc(k)}" value="${on?'1':'0'}">
+    </div>`;
+  }
+  if(type==="select"){
+    const opts=SELECT_KEYS[k].map(o=>`<option value="${esc(o[0])}" ${String(v)===o[0]?"selected":""}>${esc(o[1])}</option>`).join("");
+    return `<div><label>${esc(prettyKey(k))} <span class="mono" style="font-weight:500">${esc(k)}</span></label>
+      <select name="${esc(k)}">${opts}</select></div>`;
+  }
+  return `<div><label>${esc(prettyKey(k))} <span class="mono" style="font-weight:500">${esc(k)}</span></label>
+    <input name="${esc(k)}" value="${esc(v)}" ${type==="number"?'inputmode="numeric"':''} autocapitalize="off" autocorrect="off" spellcheck="false"></div>`;
+}
+function toggleSwitch(el){
+  el.classList.toggle("on");
+  const hidden = el.parentElement.querySelector("input[type=hidden]");
+  if(hidden) hidden.value = el.classList.contains("on") ? "1" : "0";
 }
 async function saveSettings(){
-  const inputs=document.querySelectorAll("#settingsForm input");
+  const inputs=document.querySelectorAll("#settingsForm input[name], #settingsForm select[name]");
   const obj={}; inputs.forEach(i=>{obj[i.name]=i.value;});
-  await api("/gateway/settings",{method:"POST",body:JSON.stringify(obj)});
-  toast("Đã lưu settings");
+  try{ await api("/gateway/settings",{method:"POST",body:JSON.stringify(obj)}); toast("Đã lưu cài đặt"); }
+  catch(e){ toast("Lỗi: "+e.message); }
 }
 async function addClientKey(){
-  const name=$("newClientName").value.trim()||"default";
-  const d=await api("/gateway/client-keys",{method:"POST",body:JSON.stringify({name})});
-  const out=$("newClientKeyOut"); out.style.display="block"; out.textContent="NEW KEY (copy ngay): "+d.key;
-  toast("Đã tạo client key");
+  const name=$("newClientName").value.trim()||"client";
+  try{
+    const d = await api("/gateway/client-keys",{method:"POST",body:JSON.stringify({name})});
+    const out=$("newClientKeyOut");
+    out.style.display="flex"; out.textContent=d.key||"(không có key trả về)";
+    const btn=document.createElement("button");
+    out.onclick=()=>copyValue(out.textContent,"client key");
+    $("newClientName").value="";
+    toast("Đã tạo client key"); loadSettings();
+  }catch(e){ toast("Lỗi: "+e.message); }
 }
-async function delClientKey(id){ await api("/gateway/client-keys/"+id,{method:"DELETE"}); toast("Đã xóa"); loadSettings(); }
+async function delClientKey(id){
+  if(!confirm("Xóa client key này?")) return;
+  try{ await api("/gateway/client-keys/"+id,{method:"DELETE"}); toast("Đã xóa"); loadSettings(); }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
 
+/* ---------- config ---------- */
 function loadConfig(){
   $("cfgBase").textContent=BASE_URL;
   $("cfgKey").textContent=CLIENT_KEY;
   $("cfgOpenAI").textContent=BASE_URL+"/v1";
   $("cfgAnth").textContent=BASE_URL+"/v1";
-}
-function copyText(id){
-  const t=$(id).textContent;
-  navigator.clipboard.writeText(t).then(()=>toast("Đã copy")).catch(()=>toast("Copy thất bại"));
+  $("curlBox").textContent =
+`curl ${BASE_URL}/v1/chat/completions \\
+  -H "Authorization: Bearer ${CLIENT_KEY}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}'`;
 }
 
+/* ---------- boot ---------- */
 function enterApp(){
   $("loginView").style.display="none";
-  $("appView").style.display="block";
-  $("loginUrl").value=BASE_URL;
-  $("loginKey").value=CLIENT_KEY;
-  loadStatus(); loadConfig();
+  $("appView").classList.add("ready");
+  $("loginUrl").value=BASE_URL; $("loginKey").value=CLIENT_KEY;
   setConn(true);
+  show("dashboard");
+  loadConfig();
 }
-
-(function(){
+(function boot(){
+  applyTheme(localStorage.getItem("gw_theme")||"dark");
   const u=new URL(location.href);
   const k=u.searchParams.get("key");
   if(k){
-    CLIENT_KEY=k;
-    BASE_URL=u.origin;
+    CLIENT_KEY=k; BASE_URL=u.origin;
     localStorage.setItem("gw_client_key",CLIENT_KEY);
     localStorage.setItem("gw_base_url",BASE_URL);
     u.searchParams.delete("key");
-    history.replaceState({}, "", u.toString());
+    history.replaceState({},"",u.toString());
   } else {
     CLIENT_KEY=localStorage.getItem("gw_client_key")||"";
     BASE_URL=localStorage.getItem("gw_base_url")||location.origin;
   }
-  $("loginUrl").value=BASE_URL;
-  $("loginKey").value=CLIENT_KEY;
+  $("loginUrl").value=BASE_URL; $("loginKey").value=CLIENT_KEY;
   renderProfiles();
-  if(CLIENT_KEY){ enterApp(); }
+  if(CLIENT_KEY) enterApp();
+  document.addEventListener("keydown",e=>{ if(e.key==="Enter" && $("loginView").style.display!=="none") doLogin(); });
 })();
 </script>
 </body>
