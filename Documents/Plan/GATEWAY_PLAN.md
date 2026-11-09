@@ -12,7 +12,7 @@
 - **Streaming**: SSE streaming nếu tối ưu (ưu tiên).
 - **Chạy nền**: tuỳ chọn (background mode, có thể bật/tắt).
 - **Client auth**: có API key riêng cho gateway (client phải gửi key).
-- **Port mặc định**: `151199`.
+- **Port mặc định**: `15199` (TCP port max 65535; 151199 không hợp lệ).
 - **Key rotation**: xoay key khi gặp **bất cứ lỗi nào** (error-based rotation).
 - **7 điểm mở**: đã chốt → xem §18 (Hummingbird, GRDB, LAN opt-in, log body opt-in, token bucket rate limit, TLS opt-in, tool calling passthrough).
 

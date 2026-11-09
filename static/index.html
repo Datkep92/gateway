@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gateway</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#0f1115;color:#e6e6e6}
+header{padding:16px 24px;background:#1a1d24;border-bottom:1px solid #2a2e38}
+header h1{margin:0;font-size:20px}
+main{padding:24px;max-width:1100px;margin:0 auto}
+nav{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+nav button{background:#2a2e38;color:#e6e6e6;border:1px solid #3a3f4b;padding:8px 14px;border-radius:8px;cursor:pointer}
+nav button.active{background:#4f6ef7;border-color:#4f6ef7}
+.card{background:#1a1d24;border:1px solid #2a2e38;border-radius:12px;padding:16px;margin-bottom:16px}
+input,select,textarea{background:#0f1115;color:#e6e6e6;border:1px solid #3a3f4b;border-radius:6px;padding:8px;width:100%;box-sizing:border-box}
+button.primary{background:#4f6ef7;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer}
+button.danger{background:#e05252;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px;border-bottom:1px solid #2a2e38;text-align:left;font-size:14px}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#2a2e38}
+.badge.ok{background:#1f6f3f}
+.badge.off{background:#6f1f1f}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+label{font-size:13px;color:#9aa0ad;display:block;margin-bottom:4px}
+.section{display:none}
+.section.active{display:block}
+pre{background:#0f1115;padding:12px;border-radius:8px;overflow:auto;font-size:12px}
+</style>
+</head>
+<body>
+<header><h1>Gateway — OpenAI & Anthropic proxy</h1></header>
+<main>
+<div class="card">
+  <div class="row">
+    <div style="flex:1">
+      <label>Client key</label>
+      <input id="clientKey" placeholder="Nhập client key để quản lý">
+    </div>
+    <div>
+      <button class="primary" onclick="saveKey()">Lưu</button>
+    </div>
+  </div>
+  <div id="statusLine" style="margin-top:8px;font-size:13px;color:#9aa0ad"></div>
+</div>
+
+<nav>
+  <button onclick="show('dashboard')" id="tab-dashboard" class="active">Dashboard</button>
+  <button onclick="show('keys')" id="tab-keys">Keys</button>
+  <button onclick="show('models')" id="tab-models">Models</button>
+  <button onclick="show('logs')" id="tab-logs">Logs</button>
+  <button onclick="show('settings')" id="tab-settings">Settings</button>
+</nav>
+
+<div id="dashboard" class="section active">
+  <div class="card"><h3>Trạng thái</h3><pre id="statusBox">...</pre></div>
+</div>
+
+<div id="keys" class="section">
+  <div class="card">
+    <h3>Thêm API key upstream</h3>
+    <div class="row">
+      <div style="flex:1"><label>Provider</label>
+        <select id="newProvider"><option value="openai">openai</option><option value="anthropic">anthropic</option></select></div>
+      <div style="flex:2"><label>Label</label><input id="newLabel" placeholder="label"></div>
+      <div style="flex:3"><label>Key</label><input id="newKey" placeholder="sk-..."></div>
+      <div><button class="primary" onclick="addKey()">Thêm</button></div>
+    </div>
+  </div>
+  <div class="card"><h3>Danh sách keys</h3><div id="keysTable"></div></div>
+</div>
+
+<div id="models" class="section">
+  <div class="card"><h3>Models (chỉ enabled mới xuất hiện ở /v1/models)</h3><div id="modelsTable"></div></div>
+</div>
+
+<div id="logs" class="section">
+  <div class="card"><h3>Recent logs</h3><button onclick="loadLogs()">Refresh</button><div id="logsTable"></div></div>
+</div>
+
+<div id="settings" class="section">
+  <div class="card"><h3>Settings</h3><div id="settingsForm"></div><button class="primary" onclick="saveSettings()">Lưu</button></div>
+  <div class="card"><h3>Client keys</h3>
+    <div class="row"><input id="newClientName" placeholder="name"><button class="primary" onclick="addClientKey()">Tạo client key</button></div>
+    <div id="clientKeysTable"></div>
+    <pre id="newClientKeyOut"></pre>
+  </div>
+</div>
+</main>
+
+<script>
+const BASE = "";
+function key(){ return localStorage.getItem("gw_client_key") || document.getElementById("clientKey").value.trim(); }
+function saveKey(){ const v=document.getElementById("clientKey").value.trim(); localStorage.setItem("gw_client_key",v); document.getElementById("statusLine").textContent="Đã lưu client key."; refreshAll(); }
+function hdr(){ return {"Content-Type":"application/json","Authorization":"Bearer "+key()}; }
+function show(id){
+  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+  document.getElementById("tab-"+id).classList.add("active");
+  if(id==="dashboard") loadStatus();
+  if(id==="keys") loadKeys();
+  if(id==="models") loadModels();
+  if(id==="logs") loadLogs();
+  if(id==="settings") loadSettings();
+}
+async function api(path, opts={}){
+  const r = await fetch(BASE+path, {headers: hdr(), ...opts});
+  if(!r.ok){ const t=await r.text(); throw new Error(r.status+" "+t); }
+  return r.json();
+}
+async function loadStatus(){
+  try{
+    const s = await api("/gateway/status");
+    document.getElementById("statusBox").textContent = JSON.stringify(s,null,2);
+  }catch(e){ document.getElementById("statusBox").textContent = e.message; }
+}
+async function loadKeys(){
+  try{
+    const d = await api("/gateway/keys");
+    let html="<table><tr><th>Provider</th><th>Label</th><th>Prefix</th><th>Enabled</th><th>Failures</th><th></th></tr>";
+    for(const k of d.keys){
+      html += `<tr><td>${k.provider}</td><td>${k.label}</td><td>${k.key_prefix}</td><td>${k.enabled}</td><td>${k.failure_count}</td><td><button class="danger" onclick="delKey('${k.id}')">Xóa</button></td></tr>`;
+    }
+    html+="</table>";
+    document.getElementById("keysTable").innerHTML=html;
+  }catch(e){ document.getElementById("keysTable").innerHTML=e.message; }
+}
+async function addKey(){
+  const body={provider:document.getElementById("newProvider").value,label:document.getElementById("newLabel").value,key:document.getElementById("newKey").value};
+  await api("/gateway/keys",{method:"POST",body:JSON.stringify(body)});
+  document.getElementById("newLabel").value=""; document.getElementById("newKey").value="";
+  loadKeys();
+}
+async function delKey(id){ await api("/gateway/keys/"+id,{method:"DELETE"}); loadKeys(); }
+async function loadModels(){
+  try{
+    const d = await api("/gateway/models");
+    let html="<table><tr><th>ID</th><th>Provider</th><th>Display</th><th>Enabled</th><th></th></tr>";
+    for(const m of d.models){
+      html += `<tr><td>${m.id}</td><td>${m.provider}</td><td>${m.display_name}</td><td>${m.enabled}</td><td><button onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?'Tắt':'Bật'}</button></td></tr>`;
+    }
+    html+="</table>";
+    document.getElementById("modelsTable").innerHTML=html;
+  }catch(e){ document.getElementById("modelsTable").innerHTML=e.message; }
+}
+async function toggleModel(id,enabled){ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); }
+async function loadLogs(){
+  try{
+    const d = await api("/gateway/logs?limit=100");
+    let html="<table><tr><th>Time</th><th>Provider</th><th>Model</th><th>Status</th><th>Latency</th><th>Stream</th></tr>";
+    for(const l of d.logs){
+      html += `<tr><td>${new Date(l.timestamp*1000).toLocaleTimeString()}</td><td>${l.provider||''}</td><td>${l.model||''}</td><td>${l.status_code}</td><td>${l.latency_ms}ms</td><td>${l.stream}</td></tr>`;
+    }
+    html+="</table>";
+    document.getElementById("logsTable").innerHTML=html;
+  }catch(e){ document.getElementById("logsTable").innerHTML=e.message; }
+}
+async function loadSettings(){
+  try{
+    const d = await api("/gateway/settings");
+    const s = d.settings;
+    let html="";
+    for(const [k,v] of Object.entries(s)){
+      html += `<div style="margin-bottom:8px"><label>${k}</label><input name="${k}" value="${v}"></div>`;
+    }
+    document.getElementById("settingsForm").innerHTML=html;
+    // client keys
+    const ck = await api("/gateway/client-keys");
+    let ckh="<table><tr><th>Name</th><th>Enabled</th><th>Created</th><th></th></tr>";
+    for(const k of ck.client_keys){
+      ckh += `<tr><td>${k.name}</td><td>${k.enabled}</td><td>${new Date(k.created_at*1000).toLocaleString()}</td><td><button class="danger" onclick="delClientKey('${k.id}')">Xóa</button></td></tr>`;
+    }
+    ckh+="</table>";
+    document.getElementById("clientKeysTable").innerHTML=ckh;
+  }catch(e){ document.getElementById("settingsForm").innerHTML=e.message; }
+}
+async function saveSettings(){
+  const inputs = document.querySelectorAll("#settingsForm input");
+  const obj={};
+  inputs.forEach(i=>{ obj[i.name]=i.value; });
+  await api("/gateway/settings",{method:"POST",body:JSON.stringify(obj)});
+  alert("Đã lưu");
+}
+async function addClientKey(){
+  const name=document.getElementById("newClientName").value.trim()||"default";
+  const d=await api("/gateway/client-keys",{method:"POST",body:JSON.stringify({name})});
+  document.getElementById("newClientKeyOut").textContent="NEW KEY (copy now): "+d.key;
+}
+async function delClientKey(id){ await api("/gateway/client-keys/"+id,{method:"DELETE"}); loadSettings(); }
+function refreshAll(){ loadStatus(); }
+window.onload=()=>{ const k=localStorage.getItem("gw_client_key"); if(k) document.getElementById("clientKey").value=k; loadStatus(); };
+</script>
+</body>
+</html>
