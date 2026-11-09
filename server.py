@@ -170,6 +170,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
         if name.endswith(".js"): ct="application/javascript"
         self.send_response(200)
         self.send_header("Content-Type", ct)
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(data)))
         handle_cors(self)
         self.end_headers()
