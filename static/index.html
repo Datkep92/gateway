@@ -954,7 +954,7 @@ async function api(path,opts){
 
 /* ---------- công tắc cổng ---------- */
 async function gatewayOff(){
-  if(!confirm("Tắt cổng? API sẽ ngừng nhận yêu cầu cho tới khi bạn bật lại bằng trang hiện ra ngay sau đó.")) return;
+  if(!confirm("Tắt hẳn cổng? API ngừng nhận yêu cầu và cổng đóng cho tới khi bạn mở lại bằng app Cổng.")) return;
   const m=$("powerMsg");
   if(m) m.textContent="Đang tắt…";
   try{

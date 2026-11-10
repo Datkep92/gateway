@@ -42,9 +42,9 @@ python3 Tests/live_ui_test.py         # chạy chính mã giao diện trong node
 ## Gói cài đặt & công tắc bật/tắt
 - Nguồn nằm trong `packaging/`: `daemon.plist.in`, `gateway-supervise.in`, `gatewayctl`, `postinst`, `prerm`; `apelin/build.sh` thay `@PREFIX@` rồi gói bằng `dpkg-deb -b --root-owner-group`. Build bằng `apelin_project_build`, cài bằng `apelin_package_install` (mã gói `wiki.qaq.gateway`, rootless, chỉ chứa plist + script trong `/var/jb` và app `GatewaySwitch.app`, không chứa mã dự án).
 - **Trên máy này launchd KHÔNG chạy thẳng một script**: đặt script làm `ProgramArguments[0]` thì dịch vụ nạp được nhưng chết ngay (`last exit code = 78: EX_CONFIG`, `state = spawn scheduled`). Phải gọi qua shell: `["@PREFIX@/bin/sh", "@PREFIX@/usr/bin/gateway-supervise"]` — giống `com.ofm.watchdog.plist`.
-- `gateway-supervise` chạy vòng lặp: có `data/paused` → `paused.py` (trang "Bật cổng" ở **đúng cổng** đang dùng), không thì `main.py`. Dịch vụ: `UserName mobile`, `RunAtLoad` + `KeepAlive`, log vào `run.log` của dự án.
-- Công tắc: nút **Tắt cổng** trong giao diện gọi `POST /gateway/off` (**cần client key**, chỉ loopback không đủ); lệnh `gatewayctl on|off|restart|status|pid`. `gatewayctl off` phải **dừng tiến trình** (không chỉ ghi cờ) thì bộ giám sát mới chuyển sang trang bật lại. Trang tắt gọi `POST /on` **không cần key**.
-- Khi đang tắt: trang chủ trả 200 kèm nút "Bật cổng", `/v1/*` trả 503. Muốn kiểm nhanh: `gatewayctl status`.
+- `gateway-supervise` chạy vòng lặp: có `data/paused` → **không chạy gì rồi thoát 0** (cổng đóng hẳn, launchd để yên, không tốn pin); không có cờ → chạy `main.py`, dò cổng mỗi 10 s, cổng treo thì TERM → 1 s → KILL rồi chạy lại. Dịch vụ: `UserName mobile`, `RunAtLoad` + `KeepAlive`, log vào `run.log` của dự án. `paused.py` (trang "Bật cổng" cũ) **không còn dùng** — còn trong mã nhưng không nằm trong luồng nào.
+- Công tắc: nút **Tắt cổng** trong giao diện gọi `POST /gateway/off` (**cần client key**, chỉ loopback không đủ); lệnh `gatewayctl on|off|restart|status|pid`. `gatewayctl off` phải **dừng tiến trình** (không chỉ ghi cờ): ghi cờ → bootout → TERM → KILL, rồi chờ tới khi không còn tiến trình và cổng im. Mở lại bằng app Cổng hoặc `gatewayctl on` (giao diện web không còn vì cổng đã đóng).
+- Khi đang tắt: **không có gì chạy, cổng đóng** (`curl` trả 000, launchd `state = not running`, `last exit code = 0`), `gatewayctl status` báo "đã tắt hẳn". Muốn kiểm nhanh: `gatewayctl status`.
 - Chưa kiểm: tự mở lại sau khi khởi động máy (chưa reboot lại máy từ lúc cài).
 
 ## App công tắc (thư mục `app/`)
