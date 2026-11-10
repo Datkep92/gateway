@@ -1,6 +1,6 @@
 # Báo lỗi Apelin: cài gói xong nhưng báo thất bại
 
-Trạng thái: **bản nháp, chưa gửi** — chờ Sếp duyệt.
+Trạng thái: **đã gửi** — https://github.com/owngoal-dev/Apelin/issues/45
 
 ## Tiêu đề
 
