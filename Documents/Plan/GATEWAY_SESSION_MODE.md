@@ -13,17 +13,17 @@ Quyết định đã chốt (1A / 2A / 3A):
 Đọc `/var/jb/Library/LaunchDaemons/wiki.qaq.apelind.plist` và `ps`:
 
 - `apelind` là dịch vụ **on-demand**: không `RunAtLoad`, không `KeepAlive`; launchd dựng nó khi có tin nhắn đầu tiên tới Mach service `wiki.qaq.apelin.service`.
-- Nó sống khi còn việc (app còn kết nối, còn request, còn tác vụ, còn worker trong session host) và **thoát 30 giây sau khi hết việc cuối cùng**.
+- Nó sống khi còn việc (app còn kết nối, còn request, còn tác vụ, còn worker trong session host) và **thoát 900 giây (15 phút) sau khi hết việc cuối cùng** — đọc `Apelind/Proxy/WorkLedger.swift` (`idleGraceSeconds = 15 * 60`; commit `67b28fd` ngày 2026-11-06 đã đổi từ 30 s lên 15 phút, nên con số "30 giây" ghi trong bản đầu của tài liệu này là **sai**).
 - Chạy bằng **root**; session host và các worker là **con của nó, cùng process group**, và plist ghi rõ "go with it: no AbandonProcessGroup" — tức launchd dọn cả nhóm tiến trình khi apelind thoát.
 
-Hệ quả: mốc "đóng app → cổng đóng sau ~15 phút" **không đúng**; thực tế là **~30 giây**, và chỉ khi không còn tác vụ nào đang chạy. Nếu Sếp muốn đúng "15 phút" thì phải thêm phần giữ lại (mục 5, câu hỏi 1).
+Hệ quả: mốc "đóng app → cổng đóng sau ~15 phút" **đúng với mã hiện nay** (900 s kể từ khi hết việc cuối cùng, và chỉ khi không còn tác vụ nào đang chạy). Nếu Sếp muốn ngắn hơn thì phải thêm phần rút ngắn ở phía apelind (mục 5, câu hỏi 1).
 
 ## 2. Kiến trúc đề xuất
 
 Neo duy nhất là `apelind`, không móc vào app iOS (app có thể bị iOS tắt mà không chạy mã dọn dẹp — đúng điểm B của câu hỏi 1).
 
 ```
-app Apelin đóng  ──►  hết việc  ──►  apelind thoát (+30s)
+app Apelin đóng  ──►  hết việc  ──►  apelind thoát (+900s)
                                         │  (launchd dọn cả process group)
                                         ▼
                                     cổng Gateway tắt theo
@@ -57,13 +57,13 @@ Hợp đồng giữa hai bên rất mỏng, một chiều:
 2. Trước khi thoát: `TERM` → chờ ≤ 5 s → `KILL` (hoặc để launchd dọn nhóm).
 3. File không tồn tại (chưa cài gói Gateway) → bỏ qua, không lỗi, không log ồn.
 4. Đường dẫn gói là cố định (`/var/jb/usr/bin/gateway-session`); thư mục dự án nằm trong script Gateway, nên đổi chỗ code chỉ sửa một dòng, không phải sửa lại Apelin.
-5. Không cần gì trong app iOS: đóng app → apelind hết việc → +30 s thoát → cổng tắt.
+5. Không cần gì trong app iOS: đóng app → apelind hết việc → +900 s (15 phút) thoát → cổng tắt.
 
 Chi phí: sửa mã Swift của apelind, phải đẩy CI GitHub (~20–27 phút) rồi cài lại; không phải sửa vài phút.
 
 ## 5. Điểm cần Sếp chốt trước khi viết mã
 
-1. **30 giây thật, không phải 15 phút.** Có muốn "giữ thêm N phút sau khi Apelin hết việc" không? (0 = đóng sau ~30 s; 15 phút = thêm bộ đếm ở phía apelind.)
+1. **15 phút, không phải 30 giây** (mã hiện nay: `idleGraceSeconds = 15 * 60`). Có muốn rút ngắn lại (ví dụ 1–2 phút) khi cổng là thứ duy nhất còn lại không? (Giữ 15 phút = không phải sửa gì thêm.)
 2. **Cổng mở lúc nào:** ngay khi apelind thức (đơn giản nhất, nhưng tốn ~50 MB RAM khi Apelin chạy dù không ai dùng cổng), hay chỉ khi Apelin bật mục "Cổng" trong Cài đặt (thêm một cờ ở phía Apelin)?
 3. **App "Cổng" và nút Tắt cổng trong trang quản lý:** bỏ hẳn, hay giữ lại làm công cụ gỡ lỗi?
 
@@ -71,7 +71,7 @@ Chi phí: sửa mã Swift của apelind, phải đẩy CI GitHub (~20–27 phút
 
 - `python3 Tests/session_test.py` (đã có, xem kết quả ở dưới) | **17/17 đạt** (cha SIGKILL → phiên tự tắt sau **3,3 s**).
 - Trong dự án: 3 bài kiểm hiện có phải còn đạt (67/67, 24/24, 38/38) sau khi đổi sang `gateway-session`; thêm bài mới: chạy `gateway-session` dưới một tiến trình cha giả → giết cha → con phải tắt trong ≤ 4 s (máy này mỗi `sleep` tốn thêm ~0,6 s nên "1 s" thật ra ~1,5 s) và không còn tiến trình nào; gửi `TERM` → tắt gọn; cổng vẫn 200 trong lúc chạy.
-- Trên máy: gỡ bản cũ (còn daemon) → cài 1.3.0 → `gatewayctl on` để chắc cổng sống → mở rồi đóng app Apelin → đo thời điểm cổng tắt (kỳ vọng ~30 s sau khi hết tác vụ) → `curl` 200 trước, không kết nối được sau.
+- Trên máy: gỡ bản cũ (còn daemon) → cài 1.3.0 → `gatewayctl on` để chắc cổng sống → mở rồi đóng app Apelin → đo thời điểm cổng tắt (kỳ vọng ~15 phút sau khi hết tác vụ, trừ khi chọn rút ngắn) → `curl` 200 trước, không kết nối được sau.
 - Kiểm chốt: `pgrep -f gateway-session` rỗng sau khi apelind thoát — không có tiến trình mồ côi.
 
 ### Kết quả đã chạy (phía Gateway)
@@ -92,7 +92,7 @@ Còn thiếu để hành vi "cổng theo phiên" chạy thật: mã phía apelin
 | Rủi ro | Chặn |
 | --- | --- |
 | Bản 1.2.x đang cài vẫn có daemon tự chạy → hai cơ chế đá nhau | `postinst` bản mới bootout daemon cũ một lần; cài xong kiểm `launchctl print` rỗng. |
-| apelind thoát 30 s làm cổng tắt giữa lúc đang dùng | App còn kết nối thì apelind còn sống, nên chỉ tắt khi thật sự rời Apelin; đây chính là điều 1A chọn. |
+| apelind thoát 15 phút làm cổng tắt giữa lúc đang dùng | App còn kết nối thì apelind còn sống, nên chỉ tắt khi thật sự rời Apelin; đây chính là điều 1A chọn. |
 | Cổng chạy root | Đặt uid `mobile` ngay trong `posix_spawn` của apelind. |
 | Mở/đóng app liên tục làm cổng nhấp nháy | Chọn mục 5.1 (giữ thêm N phút) nếu thấy phiền. |
 | Cài/gỡ gói lúc apelind đang chạy | Cổng chỉ lên ở lần apelind sau; muốn ngay thì `gatewayctl on`. |
