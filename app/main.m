@@ -1,5 +1,5 @@
-//  GatewaySwitch — app một nút bật/tắt cổng Gateway (wiki.qaq.gateway).
-//  Không dùng HTML: chỉ đọc cờ data/paused và gọi /var/jb/usr/bin/gatewayctl.
+//  GatewaySwitch — app một nút mở/tắt cổng Gateway (wiki.qaq.gateway).
+//  Không dùng HTML: hỏi trạng thái bằng /var/jb/usr/bin/gatewayctl state rồi gọi on|off.
 #import <UIKit/UIKit.h>
 #import <spawn.h>
 #import <sys/wait.h>
@@ -9,7 +9,6 @@
 extern char **environ;
 
 static NSString *const kProjectDir = @"/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway";
-static NSString *const kFlagPath = @"/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway/data/paused";
 static NSString *const kLogPath = @"/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway/run.log";
 static NSString *const kShell = @"/var/jb/bin/sh";
 static NSString *const kCtl = @"/var/jb/usr/bin/gatewayctl";
@@ -19,10 +18,6 @@ static UIColor *accentOn(void) { return [UIColor colorWithRed:0.24 green:0.86 bl
 static UIColor *accentOff(void) { return [UIColor colorWithRed:1.0 green:0.62 blue:0.45 alpha:1]; }
 static UIColor *blueButton(void) { return [UIColor colorWithRed:0.42 green:0.55 blue:1.0 alpha:1]; }
 static UIColor *redButton(void) { return [UIColor colorWithRed:1.0 green:0.36 blue:0.48 alpha:1]; }
-
-static BOOL flagExists(void) {
-    return access(kFlagPath.UTF8String, F_OK) == 0;
-}
 
 /** Chạy một script bằng dash trong /var/jb, gom cả stdout và stderr. */
 static NSString *runScript(NSString *script, NSArray<NSString *> *args) {
@@ -95,22 +90,9 @@ static NSString *lastAddress(void) {
     NSString *tail = readLogTail(16384);
     if (tail.length == 0) return @"";
     NSString *onMark = @"Gateway starting on ";
-    NSString *offMark = @"Gateway paused on ";
     NSRange rOn = [tail rangeOfString:onMark options:NSBackwardsSearch];
-    NSRange rOff = [tail rangeOfString:offMark options:NSBackwardsSearch];
-    NSRange best = NSMakeRange(NSNotFound, 0);
-    NSUInteger markLen = 0;
-    if (rOn.location != NSNotFound) {
-        best = rOn;
-        markLen = onMark.length;
-    }
-    if (rOff.location != NSNotFound &&
-        (rOn.location == NSNotFound || rOff.location > rOn.location)) {
-        best = rOff;
-        markLen = offMark.length;
-    }
-    if (best.location == NSNotFound) return @"";
-    NSUInteger from = best.location + markLen;
+    if (rOn.location == NSNotFound) return @"";
+    NSUInteger from = rOn.location + onMark.length;
     NSUInteger end = from;
     while (end < tail.length) {
         unichar c = [tail characterAtIndex:end];
@@ -131,6 +113,9 @@ static NSString *lastAddress(void) {
 @property (nonatomic, strong) UILabel *msgLabel;
 @property (nonatomic, strong) NSTimer *timer;
 @property (nonatomic, assign) BOOL busy;
+@property (nonatomic, assign) BOOL checking;
+@property (nonatomic, copy) NSString *currentState;
+- (void)applyState:(NSString *)state address:(NSString *)addr;
 @end
 
 @implementation SwitchVC
@@ -265,10 +250,9 @@ static NSString *lastAddress(void) {
 }
 
 - (void)refresh {
-    BOOL hasProject = [[NSFileManager defaultManager] fileExistsAtPath:kProjectDir];
-    BOOL paused = flagExists();
-    NSString *addr = lastAddress();
+    if (self.busy || self.checking) return;
 
+    BOOL hasProject = [[NSFileManager defaultManager] fileExistsAtPath:kProjectDir];
     if (!hasProject) {
         self.statusLabel.text = @"KHÔNG THẤY DỰ ÁN";
         self.statusLabel.textColor = accentOff();
@@ -280,35 +264,70 @@ static NSString *lastAddress(void) {
         return;
     }
 
+    // Trạng thái thật do `gatewayctl state` trả lời (một từ), hỏi ở luồng nền
+    // để giao diện không khựng: lệnh này có thể mất vài giây khi cổng treo.
+    self.checking = YES;
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSString *st = [runScript(kCtl, @[ @"state" ]) stringByTrimmingCharactersInSet:
+                        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString *addr = lastAddress();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self2 = weakSelf;
+            if (self2 == nil) return;
+            self2.checking = NO;
+            [self2 applyState:st address:addr];
+        });
+    });
+}
+
+- (void)applyState:(NSString *)state address:(NSString *)addr {
+    self.currentState = state ?: @"";
+    BOOL running = [state isEqualToString:@"dang_chay"];
+    BOOL starting = [state isEqualToString:@"dang_treo"];
+
     self.button.enabled = !self.busy;
-    self.statusLabel.text = paused ? @"ĐANG TẮT HẲN" : @"ĐANG BẬT";
-    self.statusLabel.textColor = paused ? accentOff() : accentOn();
-    self.icon.tintColor = paused ? accentOff() : accentOn();
-    if (paused) {
-        self.detailLabel.text = @"Không chạy gì cả · cổng đã đóng\nkhông tốn pin";
-    } else {
+    if (running) {
+        self.statusLabel.text = @"ĐANG CHẠY";
+        self.statusLabel.textColor = accentOn();
+        self.icon.tintColor = accentOn();
         self.detailLabel.text = addr.length
-            ? [NSString stringWithFormat:@"%@\nchạy nền · tự chạy lại nếu treo", addr]
-            : @"chạy nền · tự chạy lại nếu treo";
+            ? [NSString stringWithFormat:@"%@\nchạy theo phiên Apelin", addr]
+            : @"chạy theo phiên Apelin";
+        [self.button setTitle:@"Tắt cổng" forState:UIControlStateNormal];
+        self.button.backgroundColor = redButton();
+    } else if (starting) {
+        self.statusLabel.text = @"ĐANG KHỞI ĐỘNG";
+        self.statusLabel.textColor = accentOff();
+        self.icon.tintColor = accentOff();
+        self.detailLabel.text = @"Có tiến trình nhưng cổng chưa trả lời\ntự khởi động lại nếu treo";
+        [self.button setTitle:@"Tắt cổng" forState:UIControlStateNormal];
+        self.button.backgroundColor = redButton();
+    } else {
+        self.statusLabel.text = @"ĐANG TẮT";
+        self.statusLabel.textColor = accentOff();
+        self.icon.tintColor = accentOff();
+        self.detailLabel.text = @"Không chạy gì cả · cổng đã đóng\nkhông tốn pin";
+        [self.button setTitle:@"Mở cổng" forState:UIControlStateNormal];
+        self.button.backgroundColor = blueButton();
     }
-    [self.button setTitle:(paused ? @"Mở cổng" : @"Tắt hẳn cổng") forState:UIControlStateNormal];
-    self.button.backgroundColor = paused ? blueButton() : redButton();
     if (self.msgLabel.text.length == 0) {
-        self.msgLabel.text = @"Chạm một lần là xong, không cần mở trình duyệt.";
+        self.msgLabel.text = @"Cổng tự mở/đóng theo Apelin; nút này để mở/tắt bằng tay.";
     }
 }
 
 - (void)toggle {
     if (self.busy) return;
-    BOOL paused = flagExists();
-    NSString *arg = paused ? @"on" : @"off";
+    BOOL running = self.currentState.length > 0 &&
+                   ![self.currentState isEqualToString:@"khong_chay"];
+    NSString *arg = running ? @"off" : @"on";
     self.busy = YES;
     self.button.enabled = NO;
-    [self.button setTitle:(paused ? @"Đang bật…" : @"Đang tắt…") forState:UIControlStateNormal];
+    [self.button setTitle:(running ? @"Đang tắt…" : @"Đang mở…") forState:UIControlStateNormal];
     self.button.backgroundColor = [UIColor colorWithWhite:0.3 alpha:1];
-    self.msgLabel.text = paused
-        ? @"Đang mở cổng, chờ vài giây…"
-        : @"Đang đóng cổng, chờ vài giây…";
+    self.msgLabel.text = running
+        ? @"Đang đóng cổng, chờ vài giây…"
+        : @"Đang mở cổng, chờ vài giây…";
 
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -321,7 +340,7 @@ static NSString *lastAddress(void) {
             NSString *trimmed = [out stringByTrimmingCharactersInSet:
                                  [NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (trimmed.length == 0) {
-                self2.msgLabel.text = paused ? @"Đã gửi lệnh mở cổng." : @"Đã gửi lệnh tắt cổng.";
+                self2.msgLabel.text = running ? @"Đã gửi lệnh tắt cổng." : @"Đã gửi lệnh mở cổng.";
             } else {
                 self2.msgLabel.text = trimmed;
             }

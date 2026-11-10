@@ -1,6 +1,6 @@
 # Phương án: cổng chỉ sống theo Apelin (bỏ dịch vụ nền tự chạy)
 
-Trạng thái: **chỉ là thiết kế, chưa viết mã**. Người chốt: Sếp (qua hội thoại điều phối).
+Trạng thái: **phía Gateway đã viết mã xong, gói 1.3.0 đã dựng (chưa cài)**. Phía Apelin (mục 4) **chưa làm**. Người chốt: Sếp (qua hội thoại điều phối).
 
 Quyết định đã chốt (1A / 2A / 3A):
 
@@ -69,9 +69,23 @@ Chi phí: sửa mã Swift của apelind, phải đẩy CI GitHub (~20–27 phút
 
 ## 6. Kế hoạch kiểm
 
-- Trong dự án: 3 bài kiểm hiện có phải còn đạt (67/67, 24/24, 38/38) sau khi đổi sang `gateway-session`; thêm bài mới: chạy `gateway-session` dưới một tiến trình cha giả → giết cha → con phải tắt trong ≤ 2 s và không còn tiến trình nào; gửi `TERM` → tắt gọn; cổng vẫn 200 trong lúc chạy.
+- `python3 Tests/session_test.py` (đã có, xem kết quả ở dưới) | **17/17 đạt** (cha SIGKILL → phiên tự tắt sau **3,3 s**).
+- Trong dự án: 3 bài kiểm hiện có phải còn đạt (67/67, 24/24, 38/38) sau khi đổi sang `gateway-session`; thêm bài mới: chạy `gateway-session` dưới một tiến trình cha giả → giết cha → con phải tắt trong ≤ 4 s (máy này mỗi `sleep` tốn thêm ~0,6 s nên "1 s" thật ra ~1,5 s) và không còn tiến trình nào; gửi `TERM` → tắt gọn; cổng vẫn 200 trong lúc chạy.
 - Trên máy: gỡ bản cũ (còn daemon) → cài 1.3.0 → `gatewayctl on` để chắc cổng sống → mở rồi đóng app Apelin → đo thời điểm cổng tắt (kỳ vọng ~30 s sau khi hết tác vụ) → `curl` 200 trước, không kết nối được sau.
 - Kiểm chốt: `pgrep -f gateway-session` rỗng sau khi apelind thoát — không có tiến trình mồ côi.
+
+### Kết quả đã chạy (phía Gateway)
+
+| Việc | Kết quả |
+| --- | --- |
+| `python3 Tests/session_test.py` | **17/17 đạt**: cha SIGKILL → phiên tự tắt (đo **3,3 s**, sau khi rút bước chờ dừng con từ `sleep 1` xuống `sleep 0.2`), `main.py` dừng, cổng đóng, `run.log` ghi "session start" + "cha đã mất"; TERM → thoát 0, con dừng ngay; `standalone` → cha chết vẫn sống; không còn tiến trình nào nhắc thư mục tạm. |
+| 3 bài cũ | 67/67, 24/24, 38/38 — vẫn đạt sau khi bỏ `paused.py` và đầu `/gateway/off`. |
+| `clang -fsyntax-only -Wall -Wextra app/main.m` | Không cảnh báo. |
+| Gói | `wiki.qaq.gateway_1.3.0_iphoneos-arm64.deb` dựng xong, **chưa cài** (chờ Sếp). |
+
+**Phát hiện khi đo**: trên máy này mỗi lần gọi `sleep` tốn thêm ~0,6 s (exec), nên "sleep 1" thật ra mất ~1,5 s và `PROBE=10` thật ra là ~15 s. Vì vậy bước chờ trong `stop_child` đổi thành `sleep 0.2`; con số "tắt trong ≤ 2 s" ở trên là không đạt được với nhiều bước `sleep`, thực tế **3,3 s**.
+
+Còn thiếu để hành vi "cổng theo phiên" chạy thật: mã phía apelind (mục 4).
 
 ## 7. Rủi ro và cách chặn
 

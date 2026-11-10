@@ -19,8 +19,10 @@ python3 -m py_compile server.py
 python3 Tests/e2e_test.py             # đầu-cuối qua HTTP, máy chủ giả + DB tạm
 python3 Tests/backup_restore_test.py  # xuất ở máy A, nhập ở máy B mới, khởi động lại
 python3 Tests/live_ui_test.py         # chạy chính mã giao diện trong node, đối diện gateway thật
+python3 Tests/session_test.py         # chạy thật gateway-session: cha chết → tự tắt, TERM → thoát 0
 ```
-- Cả ba bài thử tự dựng máy chủ giả và dùng thư mục/dữ liệu tạm, **không đụng `data/gateway.db` thật**.
+- Cả bốn bài thử tự dựng máy chủ giả và dùng thư mục/dữ liệu tạm, **không đụng `data/gateway.db` thật**.
+- `session_test.py` thay `@PREFIX@` trong `packaging/gateway-session.in` bằng gốc bootstrap của máy rồi chạy script thật dưới một tiến trình cha giả; cổng giả lấy cổng trống, `GATEWAY_PROJECT_DIR` trỏ vào thư mục tạm (nên `run.log` cũng ở đó).
 - Node trên máy **không có WebAssembly** nên `fetch` thật không chạy: bài thử tự viết `fetch` bằng module `http`, và phải gửi kèm `Content-Length` (nếu không, máy chủ đọc thân rỗng).
 - Khung DOM giả trong bài thử **không tạo phần tử con từ `innerHTML`**: muốn kiểm phần tử sinh bằng `innerHTML` thì tự dựng lại từ chuỗi HTML.
 - `live_ui_test.py` chạy tuần tự nên **trạng thái cuối** mới kiểm được từ Python: việc gì phải kiểm ngay sau một bước thì kiểm trong mã node (`say(...)`) rồi mới in ra.
@@ -39,19 +41,21 @@ python3 Tests/live_ui_test.py         # chạy chính mã giao diện trong node
 - `db.init_db()` phải chạy trước `db.set_setting` (không thì lỗi `no such table: settings`).
 - `data/` và `run.log` nằm ngoài git (`.gitignore`).
 
-## Gói cài đặt & công tắc bật/tắt
-- Nguồn nằm trong `packaging/`: `daemon.plist.in`, `gateway-supervise.in`, `gatewayctl`, `postinst`, `prerm`; `apelin/build.sh` thay `@PREFIX@` rồi gói bằng `dpkg-deb -b --root-owner-group`. Build bằng `apelin_project_build`, cài bằng `apelin_package_install` (mã gói `wiki.qaq.gateway`, rootless, chỉ chứa plist + script trong `/var/jb` và app `GatewaySwitch.app`, không chứa mã dự án).
-- **Trên máy này launchd KHÔNG chạy thẳng một script**: đặt script làm `ProgramArguments[0]` thì dịch vụ nạp được nhưng chết ngay (`last exit code = 78: EX_CONFIG`, `state = spawn scheduled`). Phải gọi qua shell: `["@PREFIX@/bin/sh", "@PREFIX@/usr/bin/gateway-supervise"]` — giống `com.ofm.watchdog.plist`.
-- `gateway-supervise` chạy vòng lặp: có `data/paused` → **không chạy gì rồi thoát 0** (cổng đóng hẳn, launchd để yên, không tốn pin); không có cờ → chạy `main.py`, dò cổng mỗi 10 s, cổng treo thì TERM → 1 s → KILL rồi chạy lại. Dịch vụ: `UserName mobile`, `RunAtLoad` + `KeepAlive`, log vào `run.log` của dự án. `paused.py` (trang "Bật cổng" cũ) **không còn dùng** — còn trong mã nhưng không nằm trong luồng nào.
-- Công tắc: nút **Tắt cổng** trong giao diện gọi `POST /gateway/off` (**cần client key**, chỉ loopback không đủ); lệnh `gatewayctl on|off|restart|status|pid`. `gatewayctl off` phải **dừng tiến trình** (không chỉ ghi cờ): ghi cờ → bootout → TERM → KILL, rồi chờ tới khi không còn tiến trình và cổng im. Mở lại bằng app Cổng hoặc `gatewayctl on` (giao diện web không còn vì cổng đã đóng).
-- Khi đang tắt: **không có gì chạy, cổng đóng** (`curl` trả 000, launchd `state = not running`, `last exit code = 0`), `gatewayctl status` báo "đã tắt hẳn". Muốn kiểm nhanh: `gatewayctl status`.
-- Chưa kiểm: tự mở lại sau khi khởi động máy (chưa reboot lại máy từ lúc cài).
+## Gói cài đặt & bộ chạy cổng theo phiên
+- Nguồn nằm trong `packaging/`: `gateway-session.in`, `gatewayctl`, `postinst`, `prerm`; `apelin/build.sh` thay `@PREFIX@` rồi gói bằng `dpkg-deb -b --root-owner-group`. Build bằng `apelin_project_build`, cài bằng `apelin_package_install` (mã gói `wiki.qaq.gateway`, rootless; gói chỉ chứa script trong `/var/jb/usr/bin` + app `GatewaySwitch.app`, **không có LaunchDaemon**, không chứa mã dự án).
+- Từ 1.3.0 **không còn dịch vụ nền**: cổng sống theo phiên Apelin. Hợp đồng với apelind: nó `posix_spawn` `<prefix>/usr/bin/gateway-session` (không tham số, uid `mobile`, cùng process group). Script này chạy `main.py` ở tiến trình con, dò cổng mỗi 10 bước (không trả lời 3 lần → TERM → chờ ngắn → KILL → chạy lại), **thoát khi cha mất** (`kill -0 $PPID` hỏng hoặc ppid = 1) sau khi dừng con, và nhận `TERM`/`INT` thì dừng con rồi thoát 0. Log vào `run.log`: "Gateway session: session start / session stop / cha đã mất".
+- Chạy tay không theo phiên Apelin: `gateway-session standalone` (hoặc `GATEWAY_STANDALONE=1`) — không theo dõi cha; đây là thứ `gatewayctl on` và app Cổng dùng.
+- Biến môi trường khi gỡ lỗi: `GATEWAY_PROJECT_DIR` (mặc định thư mục dự án), `GATEWAY_PROBE_SECS` (10 bước), `GATEWAY_FAIL_HUNG` (3), `GATEWAY_FAIL_START` (6), `GATEWAY_PARENT_PID` (mặc định `$PPID`).
+- **Máy này mỗi lần gọi `sleep` tốn thêm ~0,6 s** (exec): `sleep 1` thật ra ~1,5 s, nên `PROBE=10` là chu kỳ dò ~15 s, và chỗ nào cần chờ ngắn thì dùng `sleep 0.2`. Cha mất → phiên tắt đo được **3,3 s**.
+- `gatewayctl on|off|restart|state|status|pid`: `state` trả **một từ** `dang_chay | dang_treo | khong_chay` (dò bằng `pgrep` + `curl`); `off` dừng hẳn (bootout daemon cũ → dừng phiên → TERM/KILL `main.py` → chờ cổng im); `status` in cho người đọc. Đây là công cụ gỡ lỗi và là thứ app Cổng gọi.
+- 1.3.0 **đã bỏ** nút Tắt cổng trong trang quản lý và tuyến `POST /gateway/off` (giữ `POST /gateway/restart`); `paused.py`, cờ `data/paused`, `packaging/daemon.plist.in`, `packaging/gateway-supervise.in` đã xoá — `postinst`/`prerm` chỉ còn dọn chúng khi nâng cấp từ bản ≤1.2.x.
+- **Chưa làm**: phía apelind (tự chạy `gateway-session` khi có việc, tự đóng khi hết việc) — gói 1.3.0 mới có phía Gateway; hiện cổng chỉ mở bằng app Cổng hoặc `gatewayctl on`.
 
 ## App công tắc (thư mục `app/`)
 - App Objective-C một màn hình, **không dùng HTML**: `app/main.m` (giao diện + logic), `app/Info.plist`, `app/ents.plist` (quyền), `app/makeicon.py` sinh `AppIcon60x60@2x.png` / `@3x.png` (chỉ chạy khi muốn vẽ lại biểu tượng).
 - **Máy có sẵn clang 16 và ldid** trong `/var/jb/usr/bin` và SDK iPhoneOS 16.4 của Apelin, nên app được biên dịch ngay trên máy trong `apelin/build.sh`:
   `clang -target arm64-apple-ios16.0 -isysroot <SDK> -fobjc-arc -O2 -framework UIKit -framework Foundation -framework QuartzCore` rồi `ldid -S app/ents.plist`. **Bắt buộc ký kèm quyền `platform-application` + `com.apple.private.security.no-sandbox`**: ký trơn `ldid -S` thì chạy là bị `Killed: 9`.
-- App đọc cờ `data/paused` (đang tắt) và đuôi `run.log` (`Gateway starting on` / `Gateway paused on`) để hiện trạng thái + địa chỉ; nút bấm chạy `gatewayctl off|on` qua `posix_spawn("/var/jb/bin/sh", …)` rồi đọc lại. **Không dùng `popen`**: máy không có `/bin/sh` (iOS không có shell), và `pkill`/`pgrep` nằm ở `/var/jb/usr/local/bin` nên `gatewayctl` tự đặt `PATH`.
+- App hỏi trạng thái bằng `gatewayctl state` (một từ) và lấy địa chỉ từ dòng `Gateway starting on` cuối trong `run.log`; nút bấm chạy `gatewayctl off|on` qua `posix_spawn("/var/jb/bin/sh", …)` rồi đọc lại. **Không dùng `popen`**: máy không có `/bin/sh` (iOS không có shell), và `pkill`/`pgrep` nằm ở `/var/jb/usr/local/bin` nên `gatewayctl` tự đặt `PATH`.
 - Cài/gỡ biểu tượng bằng `uicache`: `postinst` chạy `uicache -p <app>`, `prerm` chạy `uicache -u <app>`. Kiểm nhanh: `uicache -i wiki.qaq.gateway.switch`.
 - Cài lại app đè lên bản đang chạy thì phải `uicache -p` lại (hoặc respring) mới thấy bản mới.
 

@@ -1,21 +1,35 @@
 #!/bin/sh
-# chạy trước khi gỡ: dừng dịch vụ nền Gateway
+# chạy trước khi gỡ: dừng mọi thứ thuộc Gateway rồi bỏ biểu tượng app "Cổng".
 set -e
 
-JB="/var/jb"
-[ -d "$JB" ] || JB=""
+PREFIX="@PREFIX@"
+[ -d "$PREFIX" ] || PREFIX=""
+PATH="$PREFIX/usr/local/bin:$PREFIX/usr/bin:$PREFIX/bin:/usr/bin:/bin:${PATH:-}"
+export PATH
+
 LBL="wiki.qaq.gateway"
-LC="$JB/usr/bin/launchctl"
+LC="$PREFIX/usr/bin/launchctl"
 [ -x "$LC" ] || LC="/bin/launchctl"
 
+# Dịch vụ nền của bản ≤1.2.x (nếu còn) và phiên đang chạy của bản 1.3.0.
 "$LC" bootout "system/$LBL" 2>/dev/null || true
 "$LC" bootout "user/$(id -u)/$LBL" 2>/dev/null || true
-pkill -f "Projects/Gateway/main.py" 2>/dev/null || true
+rm -f "$PREFIX/Library/LaunchDaemons/$LBL.plist" 2>/dev/null || true
+
+pkill -f "gateway-session" 2>/dev/null || true
+pkill -f "gateway-supervise" 2>/dev/null || true
+pkill -f "Projects/Gateway/main\.py" 2>/dev/null || true
+pkill -f "python3 main.py" 2>/dev/null || true
+sleep 1
+pkill -9 -f "gateway-session" 2>/dev/null || true
+pkill -9 -f "gateway-supervise" 2>/dev/null || true
+pkill -9 -f "Projects/Gateway/main\.py" 2>/dev/null || true
+pkill -9 -f "python3 main.py" 2>/dev/null || true
 
 # bỏ biểu tượng app "Cổng" khỏi màn hình chính
-UIC="$JB/usr/bin/uicache"
+UIC="$PREFIX/usr/bin/uicache"
 if [ -x "$UIC" ]; then
-    "$UIC" -u "$JB/Applications/GatewaySwitch.app" >/dev/null 2>&1 || true
+    "$UIC" -u "$PREFIX/Applications/GatewaySwitch.app" >/dev/null 2>&1 || true
 fi
 
 exit 0

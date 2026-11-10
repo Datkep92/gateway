@@ -1,32 +1,43 @@
 #!/bin/sh
-# chạy sau khi cài: nạp dịch vụ nền Gateway
+# chạy sau khi cài: dọn cơ chế cũ, đăng ký app "Cổng".
+#
+# Từ 1.3.0 cổng KHÔNG còn dịch vụ nền tự chạy: nó sống theo phiên Apelin
+# (apelind chạy <prefix>/usr/bin/gateway-session). Cài xong cổng vẫn đóng cho tới
+# khi Apelin — hoặc app Cổng / `gatewayctl on` — mở. Nên ở đây chỉ dọn, không nạp gì.
 set -e
 
-JB="/var/jb"
-[ -d "$JB" ] || JB=""
+PREFIX="@PREFIX@"
+[ -d "$PREFIX" ] || PREFIX=""
+PATH="$PREFIX/usr/local/bin:$PREFIX/usr/bin:$PREFIX/bin:/usr/bin:/bin:${PATH:-}"
+export PATH
+
 LBL="wiki.qaq.gateway"
-PLIST="$JB/Library/LaunchDaemons/$LBL.plist"
-LC="$JB/usr/bin/launchctl"
+LC="$PREFIX/usr/bin/launchctl"
 [ -x "$LC" ] || LC="/bin/launchctl"
+PROJ="/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway"
 
-# dừng bản chạy tay (screen) để nhường cổng
-pkill -f "Projects/Gateway/main.py" 2>/dev/null || true
-pkill -f "python3 main.py" 2>/dev/null || true
-
+# Bản ≤1.2.x để lại một dịch vụ nền: gỡ trước, nếu không hai cơ chế tranh cổng nhau.
 "$LC" bootout "system/$LBL" 2>/dev/null || true
 "$LC" bootout "user/$(id -u)/$LBL" 2>/dev/null || true
+rm -f "$PREFIX/Library/LaunchDaemons/$LBL.plist" 2>/dev/null || true
+pkill -9 -f "gateway-supervise" 2>/dev/null || true
 
-if "$LC" bootstrap system "$PLIST" 2>/dev/null; then
-    "$LC" kickstart -k "system/$LBL" 2>/dev/null || true
-else
-    "$LC" bootstrap "user/$(id -u)" "$PLIST" 2>/dev/null || true
-    "$LC" kickstart -k "user/$(id -u)/$LBL" 2>/dev/null || true
-fi
+# Cài đè lên bản đang chạy: dừng hết để tiến trình mới là bản mới.
+pkill -f "gateway-session" 2>/dev/null || true
+pkill -f "Projects/Gateway/main\.py" 2>/dev/null || true
+pkill -f "python3 main.py" 2>/dev/null || true
+sleep 1
+pkill -9 -f "gateway-session" 2>/dev/null || true
+pkill -9 -f "Projects/Gateway/main\.py" 2>/dev/null || true
+pkill -9 -f "python3 main.py" 2>/dev/null || true
 
-# đăng ký biểu tượng app "Cổng" với SpringBoard
-UIC="$JB/usr/bin/uicache"
+# Cờ tạm dừng của bản cũ, nay không còn nghĩa.
+rm -f "$PROJ/data/paused" 2>/dev/null || true
+
+# Đăng ký biểu tượng app "Cổng" với SpringBoard.
+UIC="$PREFIX/usr/bin/uicache"
 if [ -x "$UIC" ]; then
-    "$UIC" -p "$JB/Applications/GatewaySwitch.app" >/dev/null 2>&1 \
+    "$UIC" -p "$PREFIX/Applications/GatewaySwitch.app" >/dev/null 2>&1 \
         || "$UIC" -a >/dev/null 2>&1 || true
 fi
 

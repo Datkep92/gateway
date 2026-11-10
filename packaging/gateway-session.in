@@ -1,0 +1,189 @@
+#!/bin/sh
+# Phiên Gateway (wiki.qaq.gateway, từ 1.3.0) — Apelin chạy tiến trình này khi mở cổng.
+#
+# Không còn dịch vụ nền tự chạy: tiến trình này là con ruột của apelind, cùng
+# process group, nên khi apelind thoát thì launchd dọn cả nhóm — không cần mã dọn.
+#
+#  - Chạy main.py, dò cổng mỗi PROBE giây; cổng treo thì giết rồi chạy lại.
+#  - Cha mất (apelind thoát hoặc bị giết) thì dừng con rồi thoát: không để lại
+#    tiến trình mồ côi nào.
+#  - Nhận TERM/INT thì dừng con rồi thoát 0.
+#  - Chạy tay không theo phiên Apelin: `gateway-session standalone`
+#    (hoặc GATEWAY_STANDALONE=1) — khi đó không theo dõi cha nữa.
+#
+# Mọi dòng log (kể cả output của main.py) ghi vào run.log của dự án.
+set -u
+
+PREFIX="@PREFIX@"
+PATH="$PREFIX/usr/local/bin:$PREFIX/usr/bin:$PREFIX/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+export PATH
+
+PROJ="${GATEWAY_PROJECT_DIR:-/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway}"
+PY="$PREFIX/usr/bin/python3"
+[ -x "$PY" ] || PY="$(command -v python3 2>/dev/null || echo python3)"
+RUNLOG="$PROJ/run.log"
+
+CURL="$PREFIX/usr/bin/curl"
+[ -x "$CURL" ] || CURL="$(command -v curl 2>/dev/null || true)"
+CAN_PROBE=1
+[ -x "$CURL" ] || CAN_PROBE=0
+
+PROBE="${GATEWAY_PROBE_SECS:-10}"       # số bước dò, mỗi bước sleep 1 (~1,5 s thật trên máy này)
+FAIL_HUNG="${GATEWAY_FAIL_HUNG:-3}"     # số lần dò hỏng liên tiếp khi đang chạy -> coi là treo
+FAIL_START="${GATEWAY_FAIL_START:-6}"   # số lần dò hỏng liên tiếp lúc mới khởi động
+
+WATCH_PARENT=1
+case "${1:-run}" in
+    run) ;;
+    standalone) WATCH_PARENT=0 ;;
+    *)  echo "dùng: gateway-session [standalone]"; exit 2 ;;
+esac
+[ "${GATEWAY_STANDALONE:-0}" = "1" ] && WATCH_PARENT=0
+
+PARENT="${GATEWAY_PARENT_PID:-$PPID}"
+CHILD=""
+
+log() { printf '%s Gateway session: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$RUNLOG" 2>/dev/null \
+        || printf '%s Gateway session: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
+
+[ -d "$PROJ" ] || { log "không thấy thư mục $PROJ"; exit 1; }
+cd "$PROJ" || exit 1
+
+# Địa chỉ cổng: lấy từ dòng khởi động gần nhất trong run.log (đổi cổng vẫn đúng).
+address() {
+    [ -f "$RUNLOG" ] || return 0
+    tail -n 400 "$RUNLOG" 2>/dev/null \
+        | grep -o 'Gateway starting on [0-9.]*:[0-9]*' | tail -n 1 | awk '{print $4}'
+}
+
+probe_ok() { # $1 = host:port
+    [ "$CAN_PROBE" -eq 1 ] || return 1
+    "$CURL" -s -m 5 -o /dev/null "http://$1/" >/dev/null 2>&1
+}
+
+# Cha còn sống không? 0 = còn, 1 = đã mất (hoặc không theo dõi cha).
+parent_gone() {
+    [ "$WATCH_PARENT" -eq 1 ] || return 1
+    kill -0 "$PARENT" 2>/dev/null || return 0
+    _pp="$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')"
+    [ "$_pp" = "1" ] && return 0
+    return 1
+}
+
+# Dừng tiến trình con: TERM trước, không chịu dừng thì KILL.
+# Tiến trình bị đóng băng (treo) không nhận TERM ngay nên phải có bước KILL.
+# Bước chờ để ngắn: trên máy này mỗi lần gọi `sleep` tốn thêm ~0,6 s (exec),
+# nên "sleep 1" thật ra mất ~1,5 s.
+stop_child() { # $1 = pid
+    _p="${1:-}"
+    [ -n "$_p" ] || return 0
+    kill "$_p" 2>/dev/null || true
+    _i=0
+    while [ "$_i" -lt 1 ]; do
+        kill -0 "$_p" 2>/dev/null || break
+        _i=$((_i + 1))
+        sleep 0.2
+    done
+    if kill -0 "$_p" 2>/dev/null; then
+        log "tiến trình $_p không chịu dừng — dùng KILL"
+        kill -9 "$_p" 2>/dev/null || true
+    fi
+    wait "$_p" 2>/dev/null || true
+    CHILD=""
+}
+
+on_signal() {
+    log "nhận tín hiệu dừng — dừng tiến trình con"
+    stop_child "$CHILD"
+    log "session stop"
+    exit 0
+}
+trap on_signal TERM INT
+
+# Ngủ $1 giây, mỗi giây kiểm cha còn sống và tiến trình con còn chạy.
+# 0 = còn chạy · 1 = cha mất · 2 = con đã thoát
+patrol() { # $1 = số giây, $2 = pid con (rỗng thì chỉ kiểm cha)
+    _i=0
+    while [ "$_i" -lt "$1" ]; do
+        _i=$((_i + 1))
+        sleep 1
+        parent_gone && return 1
+        if [ -n "${2:-}" ]; then
+            kill -0 "$2" 2>/dev/null || return 2
+        fi
+    done
+    return 0
+}
+
+# Một đời sống của main.py: 0 = con tự thoát · 1 = cha mất (dừng hẳn) · 2 = cổng treo
+run_once() {
+    "$PY" -u "$PROJ/main.py" >>"$RUNLOG" 2>&1 &
+    CHILD=$!
+    log "chạy main.py (pid $CHILD)"
+    _up=0
+    _fails=0
+    _limit="$FAIL_START"
+    while kill -0 "$CHILD" 2>/dev/null; do
+        if parent_gone; then
+            log "cha đã mất — dừng tiến trình $CHILD"
+            stop_child "$CHILD"
+            return 1
+        fi
+
+        _addr="$(address)"
+        if [ -n "$_addr" ] && probe_ok "$_addr"; then
+            if [ "$_up" -eq 0 ]; then
+                log "cổng trả lời ở $_addr"
+            fi
+            _up=1
+            _fails=0
+            _limit="$FAIL_HUNG"
+        else
+            _fails=$((_fails + 1))
+            if [ "$_fails" -ge "$_limit" ]; then
+                log "cổng không trả lời $_fails lần liên tiếp (${_addr:-chưa có địa chỉ}) — khởi động lại"
+                stop_child "$CHILD"
+                return 2
+            fi
+        fi
+
+        patrol "$PROBE" "$CHILD"
+        case "$?" in
+            0) ;;
+            1) log "cha đã mất — dừng tiến trình $CHILD"
+               stop_child "$CHILD"
+               return 1 ;;
+            2) break ;;
+        esac
+    done
+    wait "$CHILD" 2>/dev/null || true
+    CHILD=""
+    return 0
+}
+
+log "session start (pid $$, cha ${PARENT:-?}, dò ${PROBE}s)"
+while :; do
+    if parent_gone; then
+        log "cha đã mất — không chạy lại"
+        break
+    fi
+
+    started="$(date +%s)"
+    run_once
+    [ "$?" -eq 1 ] && break
+
+    ran=$(( $(date +%s) - started ))
+    if [ "$ran" -lt 5 ]; then
+        log "main.py thoát sau ${ran}s — chờ 5s rồi chạy lại"
+        patrol 5 ""
+    else
+        patrol 1 ""
+    fi
+    if [ "$?" -eq 1 ]; then
+        log "cha đã mất — không chạy lại"
+        break
+    fi
+done
+
+log "session stop"
+exit 0

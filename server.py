@@ -8,8 +8,8 @@ START_TIME = time.time()
 # địa chỉ tiến trình này đang nghe: để biết nhập file xong có phải khởi động lại không
 LISTEN = {"host": None, "port": None, "tls": False}
 MAX_IMPORT_BYTES = 4 * 1024 * 1024
-# Cờ "cổng đang tắt": bộ giám sát thấy file này thì không chạy gì (cổng đóng hẳn)
-PAUSE_FLAG = os.path.join(db.DATA_DIR, "paused")
+# Từ 1.3.0 không còn cờ "tạm dừng": cổng sống theo phiên Apelin, đóng/mở bằng
+# Cài đặt Apelin hoặc app "Cổng" (gatewayctl on|off).
 
 def json_response(handler, status, obj, headers=None):
     data = json.dumps(obj).encode()
@@ -720,18 +720,6 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                                   "port": port, "tls_enabled": tls})
         threading.Timer(0.6, reexec_process).start()
 
-    def _gateway_off(self):
-        """Tắt cổng: ghi cờ rồi thoát; bộ giám sát thấy cờ thì không chạy gì nữa
-        (cổng đóng hẳn). Mở lại bằng app Cổng hoặc `gatewayctl on`."""
-        try:
-            with open(PAUSE_FLAG, "w") as f:
-                f.write(str(int(time.time())))
-        except OSError as e:
-            json_response(self, 500, {"error": {"message": "không tắt được: %s" % e}})
-            return
-        json_response(self, 200, {"ok": True, "paused": True})
-        threading.Timer(0.6, lambda: os._exit(0)).start()
-
     # ---- gateway management ----
     def _require_mgmt_auth(self):
         cid = db.validate_client_key(extract_key(self.headers))
@@ -809,9 +797,6 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/gateway/restart":
             self._gateway_restart()
-            return
-        if path == "/gateway/off":
-            self._gateway_off()
             return
         body = read_body(self)
         try:

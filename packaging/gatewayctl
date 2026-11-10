@@ -1,24 +1,32 @@
 #!/bin/sh
-# gatewayctl on|off|restart|status|pid — công tắc Gateway (wiki.qaq.gateway)
-#   off: tắt hẳn — không còn tiến trình nào, cổng đóng, không tốn pin.
-#   on : khởi chạy lại dịch vụ (bộ giám sát tự dò cổng và tự chạy lại nếu treo).
+# gatewayctl on|off|restart|status|state|pid — mở/dừng cổng Gateway bằng tay.
+#
+# Từ 1.3.0 cổng KHÔNG còn dịch vụ nền tự chạy: nó sống theo phiên Apelin
+# (apelind chạy <prefix>/usr/bin/gateway-session khi mở cổng, và tiến trình đó
+# tắt theo khi apelind thoát). Lệnh ở đây là công cụ gỡ lỗi để mở/dừng bằng tay,
+# đồng thời là thứ app "Cổng" gọi.
+#   on     : chạy gateway-session ở chế độ chạy tay (standalone) rồi chờ cổng trả lời.
+#   off    : dừng hẳn — hết tiến trình phiên, hết main.py, cổng đóng.
+#   state  : một từ cho máy đọc — dang_chay | dang_treo | khong_chay.
 set -u
 
 # pkill/pgrep ở /usr/local/bin, curl/launchctl ở /usr/bin — đặt PATH để chạy được
 # cả khi được gọi từ app (không có môi trường của shell).
-PATH="/var/jb/usr/local/bin:/var/jb/usr/bin:/var/jb/bin:/usr/bin:/bin:/usr/local/bin:${PATH:-}"
-export PATH
-
 JB="/var/jb"
 [ -d "$JB" ] || JB=""
+PATH="$JB/usr/local/bin:$JB/usr/bin:$JB/bin:/usr/bin:/bin:/usr/local/bin:${PATH:-}"
+export PATH
+
 LBL="wiki.qaq.gateway"
-PLIST="$JB/Library/LaunchDaemons/$LBL.plist"
 LC="$JB/usr/bin/launchctl"
 [ -x "$LC" ] || LC="/bin/launchctl"
 
 PROJ="/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway"
-FLAG="$PROJ/data/paused"
 LOG="$PROJ/run.log"
+OLD_FLAG="$PROJ/data/paused"           # cờ của bản ≤1.2.x, nay không còn nghĩa
+SESS="$JB/usr/bin/gateway-session"
+SH="$JB/bin/sh"
+[ -x "$SH" ] || SH="$(command -v sh 2>/dev/null || true)"
 
 # Cổng đang dùng: biến môi trường GATEWAY_PORT, rồi tới setting `port` trong data/gateway.db.
 PORT="${GATEWAY_PORT:-}"
@@ -30,27 +38,31 @@ case "$PORT" in
 esac
 
 page() { curl -s -m 3 "http://127.0.0.1:$PORT/" 2>/dev/null || true; }
-main_pid() { pgrep -f "Projects/Gateway/main.py" 2>/dev/null || true; }
-serving_pids() { pgrep -f "Projects/Gateway/(main|paused)\.py" 2>/dev/null || true; }
-supervise_pids() { pgrep -f "gateway-supervise" 2>/dev/null || true; }
+main_pid() { pgrep -f "Projects/Gateway/main\.py" 2>/dev/null || true; }
+serving_pids() { pgrep -f "Projects/Gateway/main\.py" 2>/dev/null || true; }
+session_pids() { pgrep -f "gateway-session" 2>/dev/null || true; }
 
-# dang_chay | dang_treo | dang_tat | khong_nghe
+# dang_chay | dang_treo | khong_chay
 state() {
-    if [ -f "$FLAG" ]; then echo dang_tat; return; fi
     if [ -n "$(serving_pids)" ]; then
         if [ -n "$(page)" ]; then echo dang_chay; else echo dang_treo; fi
         return
     fi
-    if [ -n "$(page)" ]; then echo dang_chay; else echo khong_nghe; fi
+    if [ -n "$(session_pids)" ]; then
+        echo dang_treo
+        return
+    fi
+    if [ -n "$(page)" ]; then echo dang_chay; else echo khong_chay; fi
 }
 
 # Không còn gì chạy và cổng im hẳn.
 nothing_running() {
-    [ -z "$(serving_pids)$(supervise_pids)" ] || return 1
+    [ -z "$(serving_pids)$(session_pids)" ] || return 1
     [ -z "$(page)" ]
 }
 
-loaded() {
+# Dịch vụ nền của bản ≤1.2.x còn sót lại (gói mới không dùng nữa).
+old_daemon_loaded() {
     "$LC" print "system/$LBL" >/dev/null 2>&1 || "$LC" print "user/$(id -u)/$LBL" >/dev/null 2>&1
 }
 
@@ -77,60 +89,69 @@ wait_nothing() { # $1 = số giây chờ
 kill_manual() {
     # Máy này tiến trình do launchd chạy KHÔNG chết vì tín hiệu dừng êm (đã thử: TERM
     # không tác dụng), nên phải ép KILL. Vẫn gửi TERM trước để tiến trình kịp đóng DB.
-    pkill -f "Projects/Gateway/main.py" 2>/dev/null || true
-    pkill -f "Projects/Gateway/paused.py" 2>/dev/null || true
+    pkill -f "Projects/Gateway/main\.py" 2>/dev/null || true
     pkill -f "python3 main.py" 2>/dev/null || true
     sleep 1
-    pkill -9 -f "Projects/Gateway/main.py" 2>/dev/null || true
-    pkill -9 -f "Projects/Gateway/paused.py" 2>/dev/null || true
+    pkill -9 -f "Projects/Gateway/main\.py" 2>/dev/null || true
     pkill -9 -f "python3 main.py" 2>/dev/null || true
     return 0
 }
 
-stop_job() {
-    kill_manual
-    "$LC" bootout "system/$LBL" 2>/dev/null || true
-    "$LC" bootout "user/$(id -u)/$LBL" 2>/dev/null || true
-    pkill -9 -f "gateway-supervise" 2>/dev/null || true
-    sleep 1
+stop_session() {
+    pkill -f "gateway-session" 2>/dev/null || true
+    i=0
+    while [ "$i" -lt 5 ]; do
+        [ -z "$(session_pids)" ] && return 0
+        i=$((i + 1))
+        sleep 1
+    done
+    pkill -9 -f "gateway-session" 2>/dev/null || true
     return 0
 }
 
-start_job() {
-    [ -f "$PLIST" ] || { echo "Thiếu $PLIST — cài lại gói wiki.qaq.gateway."; exit 1; }
-    kill_manual
-    "$LC" bootstrap system "$PLIST" 2>/dev/null || true
-    "$LC" bootstrap "user/$(id -u)" "$PLIST" 2>/dev/null || true
-    "$LC" kickstart -k "system/$LBL" 2>/dev/null \
-        || "$LC" kickstart -k "user/$(id -u)/$LBL" 2>/dev/null || true
+# Bản ≤1.2.x: gỡ dịch vụ nền cũ để hai cơ chế không đá nhau.
+drop_old_daemon() {
+    "$LC" bootout "system/$LBL" 2>/dev/null || true
+    "$LC" bootout "user/$(id -u)/$LBL" 2>/dev/null || true
+    rm -f "$JB/Library/LaunchDaemons/$LBL.plist" 2>/dev/null || true
+    pkill -9 -f "gateway-supervise" 2>/dev/null || true
     return 0
 }
 
 do_off() {
-    mkdir -p "$PROJ/data" 2>/dev/null || true
-    if ! echo "$(date +%s)" > "$FLAG" 2>/dev/null; then
-        echo "Không ghi được $FLAG — cần quyền ghi vào thư mục dự án."
-        exit 1
-    fi
-    stop_job
+    drop_old_daemon
+    stop_session
+    kill_manual
+    rm -f "$OLD_FLAG" 2>/dev/null || true
     if wait_nothing 15; then
-        echo "Đã tắt cổng hẳn: không còn tiến trình nào, cổng $PORT đã đóng."
-        echo "Mở lại bằng app Cổng (hoặc: gatewayctl on)"
+        echo "Đã tắt cổng: không còn tiến trình nào, cổng $PORT đã đóng."
+        echo "Mở lại bằng app Cổng (hoặc: gatewayctl on), hoặc để Apelin tự mở ở phiên sau."
     else
-        echo "Đã ghi cờ tắt nhưng vẫn còn tiến trình — xem: gatewayctl status"
+        echo "Vẫn còn tiến trình giữ cổng — xem: gatewayctl status"
         exit 1
     fi
 }
 
 do_on() {
-    rm -f "$FLAG" 2>/dev/null || true
-    start_job
+    if [ "$(state)" = dang_chay ]; then
+        echo "Cổng đang chạy: http://127.0.0.1:$PORT"
+        return 0
+    fi
+    drop_old_daemon
+    kill_manual
+    rm -f "$OLD_FLAG" 2>/dev/null || true
+    [ -x "$SESS" ] || { echo "Thiếu $SESS — cài lại gói wiki.qaq.gateway."; exit 1; }
+    if [ -n "$SH" ]; then
+        "$SH" "$SESS" standalone >/dev/null 2>&1 &
+    else
+        "$SESS" standalone >/dev/null 2>&1 &
+    fi
     if wait_state dang_chay 20; then
         echo "Cổng đang chạy: http://127.0.0.1:$PORT"
         return 0
     fi
     if [ "$(state)" = dang_treo ]; then
-        echo "Cổng đã dựng nhưng chưa trả lời — bộ giám sát sẽ tự khởi động lại nếu treo."
+        echo "Cổng đã dựng nhưng chưa trả lời — bộ chạy phiên sẽ tự khởi động lại nếu treo."
         exit 1
     fi
     echo "Chưa mở được cổng — xem $LOG"
@@ -141,26 +162,24 @@ case "${1:-status}" in
     on|start)   do_on ;;
     off|stop)   do_off ;;
     restart)
-        rm -f "$FLAG" 2>/dev/null || true
-        start_job
-        if wait_state dang_chay 20; then
-            echo "Đã khởi động lại: http://127.0.0.1:$PORT"
-        else
-            echo "Chưa khởi động lại được — xem $LOG"
-            exit 1
-        fi ;;
+        do_off >/dev/null 2>&1 || true
+        do_on ;;
+    state)      state ;;
     pid)        main_pid | head -n 1; [ -n "$(main_pid)" ] || echo "-" ;;
     status)
         case "$(state)" in
             dang_chay)  echo "Cổng: đang chạy (http://127.0.0.1:$PORT)" ;;
-            dang_treo)  echo "Cổng: đang chạy nhưng không trả lời — bộ giám sát sẽ tự khởi động lại" ;;
-            dang_tat)   echo "Cổng: đã tắt hẳn (không chạy gì, cổng $PORT đóng)" ;;
+            dang_treo)  echo "Cổng: có tiến trình nhưng chưa trả lời — bộ chạy phiên sẽ khởi động lại" ;;
             *)          echo "Cổng: chưa chạy (cổng $PORT im)" ;;
         esac
-        if loaded; then echo "Dịch vụ nền: đã nạp"; else echo "Dịch vụ nền: chưa nạp"; fi
-        echo "Tiến trình: $(serving_pids | tr '\n' ' ')$(supervise_pids | tr '\n' ' ')"
+        if old_daemon_loaded; then
+            echo "Dịch vụ nền cũ: CÒN NẠP (bản ≤1.2.x) — chạy: gatewayctl off"
+        else
+            echo "Dịch vụ nền: không dùng từ 1.3.0 (cổng sống theo phiên Apelin)"
+        fi
+        echo "Phiên: $(session_pids | tr '\n' ' ')$(serving_pids | tr '\n' ' ')"
         echo "Thư mục: $PROJ" ;;
     *)
-        echo "Dùng: gatewayctl on | off | restart | status | pid"
+        echo "Dùng: gatewayctl on | off | restart | state | status | pid"
         exit 2 ;;
 esac
