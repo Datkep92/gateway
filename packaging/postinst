@@ -23,4 +23,11 @@ else
     "$LC" kickstart -k "user/$(id -u)/$LBL" 2>/dev/null || true
 fi
 
+# đăng ký biểu tượng app "Cổng" với SpringBoard
+UIC="$JB/usr/bin/uicache"
+if [ -x "$UIC" ]; then
+    "$UIC" -p "$JB/Applications/GatewaySwitch.app" >/dev/null 2>&1 \
+        || "$UIC" -a >/dev/null 2>&1 || true
+fi
+
 exit 0

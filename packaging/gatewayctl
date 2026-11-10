@@ -2,6 +2,11 @@
 # gatewayctl on|off|restart|status|pid — công tắc Gateway (wiki.qaq.gateway)
 set -u
 
+# pkill/pgrep ở /usr/local/bin, curl/launchctl ở /usr/bin — đặt PATH để chạy được
+# cả khi được gọi từ app (không có môi trường của shell).
+PATH="/var/jb/usr/local/bin:/var/jb/usr/bin:/var/jb/bin:/usr/bin:/bin:/usr/local/bin:${PATH:-}"
+export PATH
+
 JB="/var/jb"
 [ -d "$JB" ] || JB=""
 LBL="wiki.qaq.gateway"

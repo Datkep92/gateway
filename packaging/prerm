@@ -12,4 +12,10 @@ LC="$JB/usr/bin/launchctl"
 "$LC" bootout "user/$(id -u)/$LBL" 2>/dev/null || true
 pkill -f "Projects/Gateway/main.py" 2>/dev/null || true
 
+# bỏ biểu tượng app "Cổng" khỏi màn hình chính
+UIC="$JB/usr/bin/uicache"
+if [ -x "$UIC" ]; then
+    "$UIC" -u "$JB/Applications/GatewaySwitch.app" >/dev/null 2>&1 || true
+fi
+
 exit 0
