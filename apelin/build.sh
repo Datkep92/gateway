@@ -63,7 +63,7 @@ chmod 0644 "${APP_DIR:?}/Info.plist" "${APP_DIR:?}"/AppIcon60x60@*.png
 SIZE=$(du -sk "${stage:?}" | awk '{print $1}')
 cat > "${stage:?}/DEBIAN/control" <<EOF
 Package: wiki.qaq.gateway
-Version: 1.1.0
+Version: 1.2.1
 Architecture: ${APELIN_ARCHITECTURE:?}
 Installed-Size: ${SIZE:?}
 Name: Gateway (tự chạy)
@@ -72,9 +72,10 @@ Maintainer: Datkep92
 Section: Utilities
 Priority: optional
 Description: Giữ cổng Gateway luôn chạy, kèm app bật/tắt một chạm.
- Dịch vụ nền tự bật cổng khi máy khởi động lại và tự bật lại nếu cổng tắt.
- Kèm app GatewaySwitch (biểu tượng "Cổng") để bật/tắt cổng bằng một chạm,
- và lệnh gatewayctl on|off|restart|status để bật/tắt bằng tay.
+ Dịch vụ nền tự bật cổng khi máy khởi động lại, tự chạy lại nếu cổng treo.
+ Tắt cổng là tắt hẳn: không còn tiến trình nào chạy nền, cổng đóng.
+ Kèm app GatewaySwitch (biểu tượng "Cổng") mở lại cổng bằng một chạm,
+ và lệnh gatewayctl on|off|restart|status để làm bằng tay.
 EOF
 
 dpkg-deb -b --root-owner-group "${stage:?}" "${APELIN_PACKAGE_DIR:?}/" >/dev/null

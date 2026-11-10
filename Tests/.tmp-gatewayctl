@@ -1,0 +1,166 @@
+#!/bin/sh
+# gatewayctl on|off|restart|status|pid — công tắc Gateway (wiki.qaq.gateway)
+#   off: tắt hẳn — không còn tiến trình nào, cổng đóng, không tốn pin.
+#   on : khởi chạy lại dịch vụ (bộ giám sát tự dò cổng và tự chạy lại nếu treo).
+set -u
+
+# pkill/pgrep ở /usr/local/bin, curl/launchctl ở /usr/bin — đặt PATH để chạy được
+# cả khi được gọi từ app (không có môi trường của shell).
+PATH="/var/jb/usr/local/bin:/var/jb/usr/bin:/var/jb/bin:/usr/bin:/bin:/usr/local/bin:${PATH:-}"
+export PATH
+
+JB="/var/jb"
+[ -d "$JB" ] || JB=""
+LBL="wiki.qaq.gateway"
+PLIST="$JB/Library/LaunchDaemons/$LBL.plist"
+LC="$JB/usr/bin/launchctl"
+[ -x "$LC" ] || LC="/bin/launchctl"
+
+PROJ="/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway"
+FLAG="$PROJ/data/paused"
+LOG="$PROJ/run.log"
+
+# Cổng đang dùng: biến môi trường GATEWAY_PORT, rồi tới setting `port` trong data/gateway.db.
+PORT="${GATEWAY_PORT:-}"
+if [ -z "$PORT" ] && [ -f "$PROJ/db.py" ]; then
+    PORT="$( (cd "$PROJ" && python3 -c 'import db; db.init_db(); print(db.get_setting("port","") or "")' 2>/dev/null) )"
+fi
+case "$PORT" in
+    ''|*[!0-9]*) PORT=15199 ;;
+esac
+
+page() { curl -s -m 3 "http://127.0.0.1:$PORT/" 2>/dev/null || true; }
+main_pid() { pgrep -f "Projects/Gateway/main.py" 2>/dev/null || true; }
+serving_pids() { pgrep -f "Projects/Gateway/(main|paused)\.py" 2>/dev/null || true; }
+supervise_pids() { pgrep -f "gateway-supervise" 2>/dev/null || true; }
+
+# dang_chay | dang_treo | dang_tat | khong_nghe
+state() {
+    if [ -f "$FLAG" ]; then echo dang_tat; return; fi
+    if [ -n "$(serving_pids)" ]; then
+        if [ -n "$(page)" ]; then echo dang_chay; else echo dang_treo; fi
+        return
+    fi
+    if [ -n "$(page)" ]; then echo dang_chay; else echo khong_nghe; fi
+}
+
+# Không còn gì chạy và cổng im hẳn.
+nothing_running() {
+    [ -z "$(serving_pids)$(supervise_pids)" ] || return 1
+    [ -z "$(page)" ]
+}
+
+loaded() {
+    "$LC" print "system/$LBL" >/dev/null 2>&1 || "$LC" print "user/$(id -u)/$LBL" >/dev/null 2>&1
+}
+
+wait_state() { # $1 = trạng thái mong đợi, $2 = số giây chờ
+    i=0
+    while [ "$i" -lt "${2:-12}" ]; do
+        [ "$(state)" = "$1" ] && return 0
+        i=$((i + 1))
+        sleep 1
+    done
+    return 1
+}
+
+wait_nothing() { # $1 = số giây chờ
+    i=0
+    while [ "$i" -lt "${1:-15}" ]; do
+        nothing_running && return 0
+        i=$((i + 1))
+        sleep 1
+    done
+    return 1
+}
+
+kill_manual() {
+    # Máy này tiến trình do launchd chạy KHÔNG chết vì tín hiệu dừng êm (đã thử: TERM
+    # không tác dụng), nên phải ép KILL. Vẫn gửi TERM trước để tiến trình kịp đóng DB.
+    pkill -f "Projects/Gateway/main.py" 2>/dev/null || true
+    pkill -f "Projects/Gateway/paused.py" 2>/dev/null || true
+    pkill -f "python3 main.py" 2>/dev/null || true
+    sleep 1
+    pkill -9 -f "Projects/Gateway/main.py" 2>/dev/null || true
+    pkill -9 -f "Projects/Gateway/paused.py" 2>/dev/null || true
+    pkill -9 -f "python3 main.py" 2>/dev/null || true
+    return 0
+}
+
+stop_job() {
+    kill_manual
+    "$LC" bootout "system/$LBL" 2>/dev/null || true
+    "$LC" bootout "user/$(id -u)/$LBL" 2>/dev/null || true
+    pkill -9 -f "gateway-supervise" 2>/dev/null || true
+    sleep 1
+    return 0
+}
+
+start_job() {
+    [ -f "$PLIST" ] || { echo "Thiếu $PLIST — cài lại gói wiki.qaq.gateway."; exit 1; }
+    kill_manual
+    "$LC" bootstrap system "$PLIST" 2>/dev/null || true
+    "$LC" bootstrap "user/$(id -u)" "$PLIST" 2>/dev/null || true
+    "$LC" kickstart -k "system/$LBL" 2>/dev/null \
+        || "$LC" kickstart -k "user/$(id -u)/$LBL" 2>/dev/null || true
+    return 0
+}
+
+do_off() {
+    mkdir -p "$PROJ/data" 2>/dev/null || true
+    if ! echo "$(date +%s)" > "$FLAG" 2>/dev/null; then
+        echo "Không ghi được $FLAG — cần quyền ghi vào thư mục dự án."
+        exit 1
+    fi
+    stop_job
+    if wait_nothing 15; then
+        echo "Đã tắt cổng hẳn: không còn tiến trình nào, cổng $PORT đã đóng."
+        echo "Mở lại bằng app Cổng (hoặc: gatewayctl on)"
+    else
+        echo "Đã ghi cờ tắt nhưng vẫn còn tiến trình — xem: gatewayctl status"
+        exit 1
+    fi
+}
+
+do_on() {
+    rm -f "$FLAG" 2>/dev/null || true
+    start_job
+    if wait_state dang_chay 20; then
+        echo "Cổng đang chạy: http://127.0.0.1:$PORT"
+        return 0
+    fi
+    if [ "$(state)" = dang_treo ]; then
+        echo "Cổng đã dựng nhưng chưa trả lời — bộ giám sát sẽ tự khởi động lại nếu treo."
+        exit 1
+    fi
+    echo "Chưa mở được cổng — xem $LOG"
+    exit 1
+}
+
+case "${1:-status}" in
+    on|start)   do_on ;;
+    off|stop)   do_off ;;
+    restart)
+        rm -f "$FLAG" 2>/dev/null || true
+        start_job
+        if wait_state dang_chay 20; then
+            echo "Đã khởi động lại: http://127.0.0.1:$PORT"
+        else
+            echo "Chưa khởi động lại được — xem $LOG"
+            exit 1
+        fi ;;
+    pid)        main_pid | head -n 1; [ -n "$(main_pid)" ] || echo "-" ;;
+    status)
+        case "$(state)" in
+            dang_chay)  echo "Cổng: đang chạy (http://127.0.0.1:$PORT)" ;;
+            dang_treo)  echo "Cổng: đang chạy nhưng không trả lời — bộ giám sát sẽ tự khởi động lại" ;;
+            dang_tat)   echo "Cổng: đã tắt hẳn (không chạy gì, cổng $PORT đóng)" ;;
+            *)          echo "Cổng: chưa chạy (cổng $PORT im)" ;;
+        esac
+        if loaded; then echo "Dịch vụ nền: đã nạp"; else echo "Dịch vụ nền: chưa nạp"; fi
+        echo "Tiến trình: $(serving_pids | tr '\n' ' ')$(supervise_pids | tr '\n' ' ')"
+        echo "Thư mục: $PROJ" ;;
+    *)
+        echo "Dùng: gatewayctl on | off | restart | status | pid"
+        exit 2 ;;
+esac

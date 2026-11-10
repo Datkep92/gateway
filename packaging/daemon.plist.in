@@ -15,8 +15,13 @@
   <string>mobile</string>
   <key>RunAtLoad</key>
   <true/>
+  <!-- Khởi động lại khi chết bất thường (bị giết, lỗi). Thoát 0 = đang tắt cổng:
+       launchd để yên, không có tiến trình nào chạy nền. -->
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>ThrottleInterval</key>
   <integer>10</integer>
   <key>EnvironmentVariables</key>

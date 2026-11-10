@@ -1,0 +1,124 @@
+#!/bin/sh
+# Bộ giám sát Gateway (wiki.qaq.gateway).
+#  - Có cờ data/paused: KHÔNG chạy gì cả rồi thoát 0 (launchd để yên, không tốn pin,
+#    cổng đóng hẳn — mở lại phải bằng app Cổng hoặc `gatewayctl on`).
+#  - Không có cờ: chạy main.py, dò cổng mỗi PROBE giây; cổng treo (còn tiến trình mà
+#    không trả lời) thì giết rồi chạy lại.
+set -u
+
+PROJ="/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway"
+PY="/var/jb/usr/bin/python3"
+[ -x "$PY" ] || PY="python3"
+
+FLAG="$PROJ/data/paused"
+RUNLOG="$PROJ/run.log"
+
+CURL="/var/jb/usr/bin/curl"
+[ -x "$CURL" ] || CURL="$(command -v curl 2>/dev/null || true)"
+
+PROBE="${GATEWAY_PROBE_SECS:-10}"       # chu kỳ dò cổng (giây)
+FAIL_HUNG="${GATEWAY_FAIL_HUNG:-3}"     # số lần dò hỏng liên tiếp khi đang chạy -> coi là treo
+FAIL_START="${GATEWAY_FAIL_START:-6}"   # số lần dò hỏng liên tiếp lúc mới khởi động
+CAN_PROBE=1
+[ -x "$CURL" ] || CAN_PROBE=0
+
+case "${1:-run}" in
+    run) ;;
+    *)  echo "dùng: gateway-supervise"; exit 2 ;;
+esac
+
+log() { printf '%s Gateway supervise: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
+
+[ -d "$PROJ" ] || { log "không thấy thư mục $PROJ"; exit 1; }
+cd "$PROJ" || exit 1
+
+# Đang tắt: không chạy gì, không giữ cổng, không tốn pin.
+if [ -f "$FLAG" ]; then
+    log "cổng đang tắt (có $FLAG) — không chạy gì"
+    exit 0
+fi
+
+# Địa chỉ cổng: lấy từ dòng khởi động gần nhất trong run.log (đổi cổng vẫn đúng).
+address() {
+    [ -f "$RUNLOG" ] || return 0
+    tail -n 400 "$RUNLOG" 2>/dev/null \
+        | grep -o 'Gateway starting on [0-9.]*:[0-9]*' | tail -n 1 | awk '{print $4}'
+}
+
+probe_ok() { # $1 = host:port
+    [ "$CAN_PROBE" -eq 1 ] || return 1
+    "$CURL" -s -m 5 -o /dev/null "http://$1/" >/dev/null 2>&1
+}
+
+# Dừng tiến trình con: TERM trước, không chịu dừng thì KILL.
+# Tiến trình bị đóng băng (treo) không nhận TERM ngay nên phải có bước KILL,
+# nếu không bộ giám sát sẽ đứng chờ mãi.
+stop_child() { # $1 = pid
+    _p="$1"
+    kill "$_p" 2>/dev/null || true
+    _i=0
+    while [ "$_i" -lt 2 ]; do
+        kill -0 "$_p" 2>/dev/null || break
+        _i=$((_i + 1))
+        sleep 1
+    done
+    if kill -0 "$_p" 2>/dev/null; then
+        log "tiến trình $_p không chịu dừng — dùng KILL"
+        kill -9 "$_p" 2>/dev/null || true
+    fi
+    wait "$_p" 2>/dev/null || true
+}
+
+while :; do
+    if [ -f "$FLAG" ]; then
+        log "thấy cờ tắt — dừng"
+        exit 0
+    fi
+
+    started="$(date +%s)"
+    "$PY" -u "$PROJ/main.py" &
+    pid=$!
+    log "chạy main.py (pid $pid)"
+
+    up=0
+    fails=0
+    limit="$FAIL_START"
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ -f "$FLAG" ]; then
+            log "có lệnh tắt — dừng tiến trình $pid"
+            stop_child "$pid"
+            exit 0
+        fi
+
+        addr="$(address)"
+        if [ -n "$addr" ] && probe_ok "$addr"; then
+            if [ "$up" -eq 0 ]; then
+                log "cổng trả lời ở $addr"
+            fi
+            up=1
+            fails=0
+            limit="$FAIL_HUNG"
+        else
+            fails=$((fails + 1))
+            if [ "$fails" -ge "$limit" ]; then
+                log "cổng không trả lời $fails lần liên tiếp (${addr:-chưa có địa chỉ}) — khởi động lại"
+                stop_child "$pid"
+                break
+            fi
+        fi
+        sleep "$PROBE"
+    done
+
+    if [ -f "$FLAG" ]; then
+        log "cổng đang tắt — không chạy lại"
+        exit 0
+    fi
+
+    ran=$(( $(date +%s) - started ))
+    if [ "$ran" -lt 5 ]; then
+        log "main.py thoát sau ${ran}s — chờ 5s rồi chạy lại"
+        sleep 5
+    else
+        sleep 1
+    fi
+done

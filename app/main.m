@@ -281,13 +281,17 @@ static NSString *lastAddress(void) {
     }
 
     self.button.enabled = !self.busy;
-    self.statusLabel.text = paused ? @"ĐANG TẮT" : @"ĐANG BẬT";
+    self.statusLabel.text = paused ? @"ĐANG TẮT HẲN" : @"ĐANG BẬT";
     self.statusLabel.textColor = paused ? accentOff() : accentOn();
     self.icon.tintColor = paused ? accentOff() : accentOn();
-    self.detailLabel.text = addr.length
-        ? [NSString stringWithFormat:@"%@\nchạy nền · tự mở lại khi khởi động máy", addr]
-        : @"chưa thấy địa chỉ trong log · dịch vụ nền tự chạy";
-    [self.button setTitle:(paused ? @"Bật cổng" : @"Tắt cổng") forState:UIControlStateNormal];
+    if (paused) {
+        self.detailLabel.text = @"Không chạy gì cả · cổng đã đóng\nkhông tốn pin";
+    } else {
+        self.detailLabel.text = addr.length
+            ? [NSString stringWithFormat:@"%@\nchạy nền · tự chạy lại nếu treo", addr]
+            : @"chạy nền · tự chạy lại nếu treo";
+    }
+    [self.button setTitle:(paused ? @"Mở cổng" : @"Tắt hẳn cổng") forState:UIControlStateNormal];
     self.button.backgroundColor = paused ? blueButton() : redButton();
     if (self.msgLabel.text.length == 0) {
         self.msgLabel.text = @"Chạm một lần là xong, không cần mở trình duyệt.";
