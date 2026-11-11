@@ -35,35 +35,58 @@ def _headers(protocol, key_value):
 
 
 def _call(provider, path_key, body_bytes, stream):
-    """Gọi một đường dẫn của provider, thử tối đa 3 key khi lỗi tạm thời."""
-    spec = P.spec(provider)
-    if spec is None:
-        return False, 400, {}, b"", None, json.dumps(
-            {"error": {"message": "provider không hợp lệ", "type": "invalid_request"}}).encode()
-    path = spec.get(path_key)
-    if not path:
-        return False, 400, {}, b"", None, json.dumps(
-            {"error": {"message": "%s không hỗ trợ giao thức này" % spec["name"],
-                       "type": "invalid_request"}}).encode()
-    url = spec["base_url"].rstrip("/") + path
+    """Gọi một đường dẫn của provider, thử nhiều key/nhà cung cấp khi lỗi tạm thời."""
+    primary = P.canonical(provider) or provider
+    # model trong thân để tự chuyển nhà cung cấp cùng model nếu key hết
+    model = None
+    try:
+        _j = json.loads(body_bytes or b"{}")
+        if isinstance(_j, dict):
+            model = (_j.get("model") or "").strip() or None
+    except Exception:
+        model = None
+
+    # danh sách nhà cung cấp sẽ thử: chính + các ncc khác có cùng model
+    candidates = [primary]
+    if model:
+        c = db.conn()
+        try:
+            for r in c.execute("SELECT DISTINCT provider FROM gateway_models WHERE id=? AND available=1", (model,)).fetchall():
+                p = P.canonical(r["provider"])
+                if p and p not in candidates:
+                    candidates.append(p)
+        finally:
+            c.close()
+
     last_err, key_id, status = b"", None, 0
-    for _ in range(3):
-        key = keypool.select_key(spec["name"])
-        if key is None:
-            if key_id is None:
-                return False, 503, {}, b"", None, json.dumps(
-                    {"error": {"message": "chưa có key cho %s" % spec["label"], "type": "no_key"}}).encode()
-            break
-        key_id = key["id"]
-        ok, status, resp_headers, payload = _request(url, "POST", _headers(spec["protocol"], key["key_value"]), body_bytes)
-        if ok:
-            keypool.mark_success(key_id)
-            return True, status, resp_headers, payload, key_id, b""
-        err_bytes = payload if isinstance(payload, (bytes, bytearray)) else b""
-        keypool.mark_failure(key_id, status)
-        last_err = err_bytes or ("HTTP %d" % status).encode()
-        if status not in RETRYABLE:
-            break
+    for prov in candidates:
+        spec = P.spec(prov)
+        if spec is None:
+            continue
+        path = spec.get(path_key)
+        if not path:
+            continue
+        url = spec["base_url"].rstrip("/") + path
+        for _ in range(2):
+            key = keypool.select_key(spec["name"])
+            if key is None:
+                if key_id is None:
+                    # chưa có key cho ncc này, thử ncc khác
+                    break
+                break
+            key_id = key["id"]
+            ok, status, resp_headers, payload = _request(url, "POST", _headers(spec["protocol"], key["key_value"]), body_bytes)
+            if ok:
+                keypool.mark_success(key_id)
+                return True, status, resp_headers, payload, key_id, b""
+            err_bytes = payload if isinstance(payload, (bytes, bytearray)) else b""
+            keypool.mark_failure(key_id, status)
+            last_err = err_bytes or ("HTTP %d" % status).encode()
+            if status not in RETRYABLE:
+                break
+    if key_id is None:
+        return False, 503, {}, b"", None, json.dumps(
+            {"error": {"message": "chưa có key khả dụng", "type": "no_key"}}).encode()
     return False, status, {}, b"", key_id, last_err
 
 
@@ -127,6 +150,56 @@ def discover_models(provider, key_value=None, timeout=180):
     url = spec["base_url"].rstrip("/") + spec["models_path"]
     return discover_models_at(url, spec["protocol"], key_value, timeout=timeout)
 
+
+def test_key_by_id(kid, model=None):
+    """Kiểm tra một API key; cập nhật health của key. -> (ok, thông báo)"""
+    c = db.conn()
+    row = c.execute("SELECT * FROM api_keys WHERE id=?", (kid,)).fetchone()
+    c.close()
+    if row is None:
+        return False, "key không tồn tại"
+    provider = row["provider"]
+    key_value = row["key_value"]
+    if not model:
+        c = db.conn()
+        mrow = c.execute("SELECT id FROM gateway_models WHERE provider=? AND enabled=1 AND available=1 LIMIT 1",
+                         (provider,)).fetchone()
+        c.close()
+        model = (mrow["id"] if mrow else None) or (P.spec(provider) or {}).get("default_models", [""])[0]
+    ok, msg = check_key(provider, key_value, model)
+    db.set_key_health(kid, "ok" if ok else "fail", msg)
+    if ok:
+        keypool.mark_success(kid)
+    else:
+        keypool.mark_failure(kid, 0)
+    return ok, msg
+
+
+def test_model(model_id):
+    """Kiểm tra một model bằng một key khả dụng của ncc; cập nhật health model+key."""
+    c = db.conn()
+    row = c.execute("SELECT * FROM gateway_models WHERE id=?", (model_id,)).fetchone()
+    c.close()
+    if row is None:
+        return False, "model không tồn tại"
+    provider = P.canonical(row["provider"]) or row["provider"]
+    key = keypool.select_key(provider)
+    if key is None:
+        c = db.conn()
+        krow = c.execute("SELECT * FROM api_keys WHERE provider=? AND enabled=1 LIMIT 1", (provider,)).fetchone()
+        c.close()
+        key = dict(krow) if krow else None
+    if key is None:
+        db.set_model_health(model_id, "fail", "chưa có key")
+        return False, "chưa có key"
+    ok, msg = check_key(provider, key["key_value"], model_id)
+    db.set_model_health(model_id, "ok" if ok else "fail", msg)
+    db.set_key_health(key["id"], "ok" if ok else "fail", msg)
+    if ok:
+        keypool.mark_success(key["id"])
+    else:
+        keypool.mark_failure(key["id"], 0)
+    return ok, msg
 
 def check_key(provider, key_value, model=None):
     """Kiểm tra key bằng một câu hỏi rất ngắn. -> (ok, thông báo)"""

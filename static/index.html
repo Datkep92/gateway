@@ -482,6 +482,15 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
         <div class="page-head"><h2>Models</h2><p>Chỉ model đang bật mới xuất hiện ở <span class="mono">/v1/models</span>.</p></div>
         <div class="card">
           <h3>🧠 Danh sách model <span class="tag" id="modelsCount"></span></h3>
+          <div class="rowflex" style="margin-bottom:8px">
+            <input id="modelSearch" placeholder="Tìm model (tên, id, nhà cc, url)…" oninput="renderModels()" style="flex:1">
+            <select id="modelSort" onchange="renderModels()">
+              <option value="id">Sắp xếp: tên model</option>
+              <option value="provider">Sắp xếp: nhà cung cấp</option>
+              <option value="url">Sắp xếp: URL</option>
+              <option value="health">Sắp xếp: trạng thái</option>
+            </select>
+          </div>
           <div id="modelsList" class="list"></div>
         </div>
       </section>
@@ -1038,6 +1047,10 @@ async function addKey(){
     $("newLabel").value=""; $("newKey").value=""; toast("Đã thêm key"); loadKeys();
   }catch(e){ toast("Lỗi: "+e.message); }
 }
+async function testKey(id){
+  try{ const r=await api("/gateway/keys/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Key OK":"Key lỗi: "+(r.message||"")); loadProviders(); }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
 async function toggleKey(id,enabled){
   try{ await api("/gateway/keys/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadProviders(); }
   catch(e){ toast("Lỗi: "+e.message); }
@@ -1065,10 +1078,13 @@ async function loadProviders(){
         <div class="item" style="margin-left:8px;margin-top:6px">
           <div class="top">
             <div class="name">${esc(k.label||"không tên")}</div>
-            <span class="badge ${k.enabled?'ok':'off'}" style="margin-left:auto">${k.enabled?"bật":"tắt"}</span>
+            <span class="badge ${k.health==='ok'?'ok':(k.health==='fail'?'off':'neutral')}" style="margin-left:auto">${esc(k.health||'chưa test')}</span>
+            <span class="badge ${k.enabled?'ok':'off'}">${k.enabled?"bật":"tắt"}</span>
           </div>
           <div class="mono">${esc(k.key_prefix)}…</div>
+          ${k.last_test_message?`<div class="kv"><span class="k">Kết quả test</span><span class="v">${esc(k.last_test_message)}</span></div>`:""}
           <div class="rowflex">
+            <button class="btn sm" onclick="testKey('${k.id}')">Test key</button>
             <button class="btn sm" onclick="toggleKey('${k.id}',${!k.enabled})">${k.enabled?"Tắt":"Bật"}</button>
             <button class="btn sm danger" onclick="delKey('${k.id}')">Xóa key</button>
           </div>
@@ -1123,23 +1139,61 @@ async function delProvider(name){
 async function loadModels(){
   const el=$("modelsList"); skeletons(el,3);
   try{
-    const d = await api("/gateway/models");
-    CACHE.models = d.models||[];
+    const [md,pd] = await Promise.all([api("/gateway/models"), api("/gateway/providers").catch(()=>({providers:[]}))]);
+    CACHE.models = md.models||[];
+    CACHE.providers = pd.providers||CACHE.providers||[];
     $("modelsCount").textContent = CACHE.models.length+" model";
-    if(!CACHE.models.length){ el.innerHTML = emptyBox("🧠","Chưa có model nào."); return; }
-    el.innerHTML = CACHE.models.map(m=>`
-      <div class="item">
-        <div class="top">
-          <span class="badge neutral">${esc(m.provider)}</span>
-          <div class="name">${esc(m.display_name||m.id)}</div>
-          <div class="switch ${m.enabled?'on':''}" style="margin-left:auto" onclick="toggleModel('${m.id}',${!m.enabled})"></div>
-        </div>
-        <div class="mono">${esc(m.id)}</div>
-      </div>`).join("");
+    renderModels();
   }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+}
+function renderModels(){
+  const el=$("modelsList");
+  const rows = CACHE.models||[];
+  const q = ($("modelSearch")||{value:""}).value.trim().toLowerCase();
+  const sort = ($("modelSort")||{value:"id"}).value;
+  const provMap = {}; (CACHE.providers||[]).forEach(p=>{ provMap[p.name]=p.base_url||""; });
+  // dedup: nếu cùng url và cùng id thì chỉ giữ một
+  const seen=new Set();
+  let list = rows.filter(m=>{
+    if(q){
+      const hay = [m.id,m.display_name,m.provider,provMap[m.provider]||""].join(" ").toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    const key = (m.id||"")+"|"+(provMap[m.provider]||"");
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  list.sort((a,b)=>{
+    if(sort==="provider") return String(a.provider||"").localeCompare(String(b.provider||""));
+    if(sort==="url") return String(provMap[a.provider]||"").localeCompare(String(provMap[b.provider]||""));
+    if(sort==="health") return String(a.health||"").localeCompare(String(b.health||""));
+    return String(a.display_name||a.id||"").localeCompare(String(b.display_name||b.id||""));
+  });
+  if(!list.length){ el.innerHTML = emptyBox("🧠", rows.length?"Không có model nào khớp.":"Chưa có model nào."); return; }
+  el.innerHTML = list.map(m=>`
+    <div class="item">
+      <div class="top">
+        <span class="badge neutral">${esc(m.provider)}</span>
+        <div class="name">${esc(m.display_name||m.id)}</div>
+        <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="margin-left:auto">${esc(m.health||'chưa test')}</span>
+        <div class="switch ${m.enabled?'on':''}" onclick="toggleModel('${m.id}',${!m.enabled})"></div>
+      </div>
+      <div class="mono">${esc(m.id)}</div>
+      <div class="kv"><span class="k">URL</span><span class="v">${esc(provMap[m.provider]||"–")}</span></div>
+      ${m.last_test_message?`<div class="kv"><span class="k">Kết quả test</span><span class="v">${esc(m.last_test_message)}</span></div>`:""}
+      <div class="rowflex">
+        <button class="btn sm" onclick="testModel('${m.id}')">Test model</button>
+        <button class="btn sm" onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?"Tắt":"Bật"}</button>
+      </div>
+    </div>`).join("");
 }
 async function toggleModel(id,enabled){
   try{ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
+async function testModel(id){
+  try{ const r=await api("/gateway/models/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Model OK":"Model lỗi: "+(r.message||"")); loadModels(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 

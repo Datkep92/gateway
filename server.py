@@ -218,7 +218,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 log_request(cid, None, None, "/v1/models", 429, int((time.time()-self._t0)*1000), False, None)
                 return
         c = db.conn()
-        rows = c.execute("SELECT id,provider,display_name FROM gateway_models WHERE enabled=1 AND available=1").fetchall()
+        rows = c.execute("SELECT id,provider,display_name FROM gateway_models WHERE enabled=1 AND available=1 AND (health IS NULL OR health!='fail')").fetchall()
         c.close()
         data = {"object":"list","data":[]}
         for r in rows:
@@ -264,6 +264,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             return model
         c = db.conn()
         rows = c.execute("""SELECT id FROM gateway_models WHERE enabled=1 AND available=1
+                            AND (health IS NULL OR health!='fail')
                             ORDER BY is_free DESC, provider, id""").fetchall()
         c.close()
         ids = [r["id"] for r in rows]
@@ -849,6 +850,22 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             db.set_setting("free_models_only", "1" if free_only else "0")
             json_response(self, 200, {"ok": True, "free_only": free_only,
                                       "enabled": db.apply_models_policy()})
+            return
+        if path == "/gateway/models/test":
+            mid = (j.get("id") or "").strip()
+            if not mid:
+                json_response(self, 400, {"error": {"message": "thieu model id"}})
+                return
+            ok, msg = proxy.test_model(mid)
+            json_response(self, 200, {"ok": ok, "message": msg})
+            return
+        if path == "/gateway/keys/test":
+            kid = (j.get("id") or "").strip()
+            if not kid:
+                json_response(self, 400, {"error": {"message": "thieu key id"}})
+                return
+            ok, msg = proxy.test_key_by_id(kid, j.get("model"))
+            json_response(self, 200, {"ok": ok, "message": msg})
             return
         json_response(self, 404, {"error":{"message":"not found"}})
 

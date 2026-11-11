@@ -108,8 +108,16 @@ def init_db():
         _ensure_column(c, "providers", col, decl)
     for col, decl in (("available", "INTEGER NOT NULL DEFAULT 1"),
                       ("is_free", "INTEGER NOT NULL DEFAULT 0"),
-                      ("last_seen_at", "REAL")):
+                      ("last_seen_at", "REAL"),
+                      ("health", "TEXT NOT NULL DEFAULT 'unknown'"),
+                      ("last_test_at", "REAL"),
+                      ("last_test_message", "TEXT")):
         _ensure_column(c, "gateway_models", col, decl)
+    # nâng cấp cột cho api_keys
+    for col, decl in (("health", "TEXT NOT NULL DEFAULT 'unknown'"),
+                      ("last_test_at", "REAL"),
+                      ("last_test_message", "TEXT")):
+        _ensure_column(c, "api_keys", col, decl)
     c.commit()
 
     # ---- nhà cung cấp ----
@@ -212,6 +220,20 @@ def upsert_models(provider, model_ids, mark_missing_unavailable=True):
     c.commit()
     c.close()
     return len(pair)
+
+def set_key_health(kid, health, message=""):
+    c = conn()
+    c.execute("UPDATE api_keys SET health=?, last_test_at=?, last_test_message=? WHERE id=?",
+              (health, now(), (message or "")[:300], kid))
+    c.commit()
+    c.close()
+
+def set_model_health(mid, health, message=""):
+    c = conn()
+    c.execute("UPDATE gateway_models SET health=?, last_test_at=?, last_test_message=? WHERE id=?",
+              (health, now(), (message or "")[:300], mid))
+    c.commit()
+    c.close()
 
 def list_models(enabled_only=False):
     c = conn()
