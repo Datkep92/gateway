@@ -121,7 +121,10 @@ def init_db():
     c.commit()
 
     # ---- nhà cung cấp ----
+    deleted = _deleted_providers()
     for name, spec in P.PROVIDERS.items():
+        if name in deleted:
+            continue
         row = c.execute("SELECT id, base_url FROM providers WHERE name=?", (name,)).fetchone()
         if row is None:
             c.execute("""INSERT INTO providers(id,name,base_url,enabled,protocol,chat_path,messages_path,models_path,key_url)
@@ -137,7 +140,10 @@ def init_db():
 
     # ---- model mặc định khi bảng còn trống ----
     if c.execute("SELECT COUNT(*) FROM gateway_models").fetchone()[0] == 0:
+        deleted = _deleted_providers()
         for name, spec in P.PROVIDERS.items():
+            if name in deleted:
+                continue
             for mid, free in P.classify(name, spec["default_models"]):
                 c.execute("""INSERT INTO gateway_models(id,provider,display_name,enabled,context_window,supports_streaming,available,is_free,last_seen_at)
                              VALUES (?,?,?,?,?,1,0,?,?)""",
@@ -290,6 +296,10 @@ def list_providers():
         out.append(d)
     return out
 
+def _deleted_providers():
+    raw = get_setting("deleted_providers", "") or ""
+    return {x.strip() for x in raw.split(",") if x.strip()}
+
 def delete_provider(name):
     """Xoá một nhà cung cấp cùng toàn bộ API key và model của nó."""
     n = (name or "").strip()
@@ -317,6 +327,15 @@ def delete_provider(name):
     c.execute("DELETE FROM providers WHERE name=?", (n,))
     c.commit()
     c.close()
+    # xoá vĩnh viễn nhà cung cấp mặc định: ghi nhớ để init_db không seed lại
+    try:
+        import providers as P
+        if n in P.PROVIDERS and n != "custom":
+            deleted = _deleted_providers()
+            deleted.add(n)
+            set_setting("deleted_providers", ",".join(sorted(deleted)))
+    except Exception:
+        pass
     # nếu model mặc định bị xoá theo, xoá setting để máy tự chọn lại
     dm = get_setting("default_model", "") or ""
     if dm:
@@ -325,6 +344,25 @@ def delete_provider(name):
         c.close()
         if not exists:
             set_setting("default_model", "")
+    return True
+
+def delete_model(mid):
+    """Xoá một model khỏi gateway."""
+    mid = (mid or "").strip()
+    if not mid:
+        return False
+    c = conn()
+    row = c.execute("SELECT 1 FROM gateway_models WHERE id=?", (mid,)).fetchone()
+    if row is None:
+        c.close()
+        return False
+    c.execute("DELETE FROM gateway_models WHERE id=?", (mid,))
+    c.commit()
+    c.close()
+    dm = get_setting("default_model", "") or ""
+    if dm == mid:
+        set_setting("default_model", "")
+    return True
     return True
 
 

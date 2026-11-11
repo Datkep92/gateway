@@ -154,6 +154,13 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
   display:grid;gap:10px;transition:border-color .16s,transform .12s;
 }
 .item:hover{border-color:var(--border2)}
+.prov-head{width:100%;display:flex;align-items:center;gap:10px;padding:0;background:none;border:none;text-align:left;cursor:pointer}
+.prov-head:focus{outline:none}
+.prov-meta{flex:1;min-width:0;display:grid;gap:2px}
+.prov-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:grid;gap:8px}
+.prov-keys{display:grid;gap:6px;margin-top:6px}
+.chev{font-size:16px;color:var(--muted);transition:transform .18s;line-height:1}
+.prov-item{padding:11px 13px}
 .item .top{display:flex;align-items:center;gap:10px;min-width:0}
 .item .name{font-weight:650;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item .sub{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
@@ -1075,7 +1082,7 @@ async function loadProviders(){
       const provKeys = byProv[p.name]||[];
       const safe = p.name.replace(/[^a-zA-Z0-9]/g,"_");
       const keysHtml = provKeys.length ? provKeys.map(k=>`
-        <div class="item" style="margin-left:8px;margin-top:6px">
+        <div class="item" style="margin-top:6px">
           <div class="top">
             <div class="name">${esc(k.label||"không tên")}</div>
             <span class="badge ${k.health==='ok'?'ok':(k.health==='fail'?'off':'neutral')}" style="margin-left:auto">${esc(k.health||'chưa test')}</span>
@@ -1088,31 +1095,48 @@ async function loadProviders(){
             <button class="btn sm" onclick="toggleKey('${k.id}',${!k.enabled})">${k.enabled?"Tắt":"Bật"}</button>
             <button class="btn sm danger" onclick="delKey('${k.id}')">Xóa key</button>
           </div>
-        </div>`).join("") : `<div class="empty" style="margin-left:8px;margin-top:6px">Chưa có key.</div>`;
+        </div>`).join("") : `<div class="empty" style="margin-top:6px">Chưa có key.</div>`;
       return `
-      <div class="item">
-        <div class="top">
+      <div class="item prov-item" id="prov_${safe}">
+        <button type="button" class="prov-head" onclick="toggleProvDetail('${esc(p.name)}')">
           <span class="badge neutral">${esc(p.label||p.name)}</span>
-          <div class="name">${esc(p.base_url||"")}</div>
-          <span class="badge ${p.connected?'ok':'off'}" style="margin-left:auto">${p.connected?"đã nối":"chưa key"}</span>
-        </div>
-        <div class="kv"><span class="k">Model bật</span><span class="v">${esc(p.model_count)}</span></div>
-        <div class="rowflex">
-          <button class="btn sm" onclick="toggleAddKey('${esc(p.name)}')">Thêm key</button>
-          <button class="btn sm danger" onclick="delProvider('${esc(p.name)}')">Xóa nhà cc</button>
-        </div>
-        <div id="addkey_${safe}" style="display:none;margin-top:8px">
-          <div class="grid2">
-            <div><label>Label</label><input id="ak_${safe}_label" placeholder="ví dụ: acc chính"></div>
-            <div><label>API key</label><input id="ak_${safe}_key" placeholder="sk-…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-            <div><label>Priority (số nhỏ ưu tiên trước)</label><input id="ak_${safe}_pri" type="number" value="0" inputmode="numeric"></div>
+          <div class="prov-meta">
+            <div class="name">${esc(p.base_url||"")}</div>
+            <div class="sub">${esc(p.key_count)} key · ${esc(p.model_count)} model · ${p.connected?"đã nối":"chưa key"}</div>
           </div>
-          <button class="btn primary block" style="margin-top:8px" onclick="submitAddKey('${esc(p.name)}','${safe}')">Lưu key</button>
+          <span class="badge ${p.connected?'ok':'off'}">${p.connected?"đã nối":"chưa key"}</span>
+          <span class="chev" id="chev_${safe}">▸</span>
+        </button>
+        <div id="prov_detail_${safe}" class="prov-detail" style="display:none">
+          <div class="kv"><span class="k">Giao thức</span><span class="v">${esc(p.protocol||"–")}</span></div>
+          <div class="kv"><span class="k">URL</span><span class="v mono">${esc(p.base_url||"–")}</span></div>
+          <div class="kv"><span class="k">Model bật</span><span class="v">${esc(p.model_count)}</span></div>
+          <div class="prov-keys">${keysHtml}</div>
+          <div class="rowflex" style="margin-top:2px">
+            <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${esc(p.name)}')">Thêm key</button>
+            <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${esc(p.name)}')">Xóa nhà cc</button>
+          </div>
+          <div id="addkey_${safe}" style="display:none;margin-top:8px">
+            <div class="grid2">
+              <div><label>Label</label><input id="ak_${safe}_label" placeholder="ví dụ: acc chính"></div>
+              <div><label>API key</label><input id="ak_${safe}_key" placeholder="sk-…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+              <div><label>Priority (số nhỏ ưu tiên trước)</label><input id="ak_${safe}_pri" type="number" value="0" inputmode="numeric"></div>
+            </div>
+            <button class="btn primary block" style="margin-top:8px" onclick="submitAddKey('${esc(p.name)}','${safe}')">Lưu key</button>
+          </div>
         </div>
-        ${keysHtml}
       </div>`;
     }).join("");
   }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+}
+function toggleProvDetail(name){
+  const safe = name.replace(/[^a-zA-Z0-9]/g,"_");
+  const el = $("prov_detail_"+safe);
+  const chev = $("chev_"+safe);
+  if(!el) return;
+  const open = el.style.display==="none" || !el.style.display;
+  el.style.display = open ? "block" : "none";
+  if(chev) chev.textContent = open ? "▾" : "▸";
 }
 function toggleAddKey(name){
   const safe = name.replace(/[^a-zA-Z0-9]/g,"_");
@@ -1185,6 +1209,7 @@ function renderModels(){
       <div class="rowflex">
         <button class="btn sm" onclick="testModel('${m.id}')">Test model</button>
         <button class="btn sm" onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?"Tắt":"Bật"}</button>
+        <button class="btn sm danger" onclick="delModel('${m.id}')">Xóa model</button>
       </div>
     </div>`).join("");
 }
@@ -1194,6 +1219,11 @@ async function toggleModel(id,enabled){
 }
 async function testModel(id){
   try{ const r=await api("/gateway/models/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Model OK":"Model lỗi: "+(r.message||"")); loadModels(); }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
+async function delModel(id){
+  if(!confirm("Xóa model '"+id+"'?")) return;
+  try{ await api("/gateway/models/"+encodeURIComponent(id),{method:"DELETE"}); toast("Đã xóa model"); loadModels(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 
