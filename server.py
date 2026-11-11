@@ -598,13 +598,35 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                     "type":"invalid_request"}})
                 return
 
-        # 4. lưu địa chỉ/giao thức
+        # 4. lưu địa chỉ/giao thức (tạo row nếu ncc đã bị xoá / chưa có)
+        import uuid as _uuid
+        c = db.conn()
+        row = c.execute("SELECT name FROM providers WHERE name=?", (chosen,)).fetchone()
+        c.close()
+        sp = providers.spec(chosen) or {}
+        if row is None:
+            c = db.conn()
+            c.execute("""INSERT INTO providers(id,name,base_url,enabled,protocol,chat_path,messages_path,models_path,key_url)
+                         VALUES (?,?,?,?,?,?,?,?,?)""",
+                      (str(_uuid.uuid4()), chosen, base_used or sp.get("base_url") or "",
+                       1, sp.get("protocol") or protocol,
+                       sp.get("chat_path") or "/v1/chat/completions",
+                       sp.get("messages_path") or "/v1/messages",
+                       models_path or sp.get("models_path") or "/v1/models",
+                       sp.get("key_url") or ""))
+            c.commit()
+            c.close()
         if chosen == "custom":
             db.update_provider("custom", base_url=base_used, protocol=protocol,
                                chat_path="/v1/chat/completions", messages_path="/v1/messages",
                                models_path=models_path or "/v1/models", enabled=1)
         elif raw_base:
             db.set_provider_base_url(chosen, raw_base)
+        # nếu từng bị xoá vĩnh viễn thì cho phép xuất hiện lại
+        deleted = {x.strip() for x in (db.get_setting("deleted_providers", "") or "").split(",") if x.strip()}
+        if chosen in deleted:
+            deleted.discard(chosen)
+            db.set_setting("deleted_providers", ",".join(sorted(deleted)))
         spec = providers.spec(chosen) or {}
 
         # 5. lưu key (cùng key thì dùng lại, không tạo trùng)

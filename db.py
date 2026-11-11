@@ -121,8 +121,13 @@ def init_db():
     c.commit()
 
     # ---- nhà cung cấp ----
+    # Chỉ seed nhà cung cấp tự nhập (custom); các nhà cung cấp có sẵn (openai,
+    # anthropic, deepseek, opencode...) không tự thêm nữa — người dùng chủ động
+    # thêm khi cần qua /gateway/onboard, và có thể xoá vĩnh viễn.
     deleted = _deleted_providers()
     for name, spec in P.PROVIDERS.items():
+        if name != "custom":
+            continue
         if name in deleted:
             continue
         row = c.execute("SELECT id, base_url FROM providers WHERE name=?", (name,)).fetchone()
@@ -142,6 +147,8 @@ def init_db():
     if c.execute("SELECT COUNT(*) FROM gateway_models").fetchone()[0] == 0:
         deleted = _deleted_providers()
         for name, spec in P.PROVIDERS.items():
+            if name != "custom":
+                continue
             if name in deleted:
                 continue
             for mid, free in P.classify(name, spec["default_models"]):
