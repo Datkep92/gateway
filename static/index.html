@@ -456,23 +456,9 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
 
       <!-- keys -->
       <section id="keys" class="section">
-        <div class="page-head"><h2>API keys upstream</h2><p>Key dùng để gọi OpenAI / Anthropic. Key được lưu trên máy này.</p></div>
+        <div class="page-head"><h2>Nhà cung cấp & API key</h2><p>Mỗi nhà cung cấp có thể có nhiều key; các key dùng chung model của nhà cung cấp đó.</p></div>
         <div class="card">
-          <h3>＋ Thêm key mới</h3>
-          <div class="grid2">
-            <div><label>Provider</label><select id="newProvider"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select></div>
-            <div><label>Label</label><input id="newLabel" placeholder="ví dụ: acc chính"></div>
-            <div><label>API key</label><input id="newKey" placeholder="sk-…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-            <div><label>Priority (số nhỏ ưu tiên trước)</label><input id="newPriority" type="number" value="0" inputmode="numeric"></div>
-          </div>
-          <button class="btn primary block" style="margin-top:12px" onclick="addKey()">Thêm key</button>
-        </div>
-        <div class="card">
-          <h3>🔑 Danh sách key <span class="tag" id="keysCount"></span></h3>
-          <div id="keysList" class="list"></div>
-        </div>
-        <div class="card">
-          <h3>🏢 Nhà cung cấp <span class="tag" id="providersCount"></span></h3>
+          <h3>🏢 Danh sách <span class="tag" id="providersCount"></span></h3>
           <div id="providersList" class="list"></div>
         </div>
       </section>
@@ -959,7 +945,7 @@ function show(id){
   if($("pageTitle")) $("pageTitle").textContent = TITLES[id]||"Gateway";
   window.scrollTo({top:0,behavior:"smooth"});
   if(id==="dashboard") loadDashboard();
-  if(id==="keys"){ loadKeys(); loadProviders(); }
+  if(id==="keys") loadProviders();
   if(id==="models") loadModels();
   if(id==="logs") loadLogs();
   if(id==="settings") loadSettings();
@@ -1039,39 +1025,83 @@ async function addKey(){
   }catch(e){ toast("Lỗi: "+e.message); }
 }
 async function toggleKey(id,enabled){
-  try{ await api("/gateway/keys/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadKeys(); }
+  try{ await api("/gateway/keys/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadProviders(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 async function delKey(id){
   if(!confirm("Xóa key này?")) return;
-  try{ await api("/gateway/keys/"+id,{method:"DELETE"}); toast("Đã xóa key"); loadKeys(); }
+  try{ await api("/gateway/keys/"+id,{method:"DELETE"}); toast("Đã xóa key"); loadProviders(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 async function loadProviders(){
   const el=$("providersList"); skeletons(el,2);
   try{
-    const d = await api("/gateway/providers");
-    const ps = d.providers||[];
+    const [pd,kd] = await Promise.all([api("/gateway/providers"), api("/gateway/keys")]);
+    const ps = pd.providers||[];
+    const ks = kd.keys||[];
+    CACHE.keys = ks;
     $("providersCount").textContent = ps.length+" nhà cc";
-    if(!ps.length){ el.innerHTML = emptyBox("🏢","Chưa có nhà cung cấp."); return; }
-    el.innerHTML = ps.map(p=>`
+    if(!ps.length){ el.innerHTML = emptyBox("🏢","Chưa có nhà cung cấp. Onboard để thêm."); return; }
+    const byProv={};
+    ks.forEach(k=>{ (byProv[k.provider]||(byProv[k.provider]=[])).push(k); });
+    el.innerHTML = ps.map(p=>{
+      const provKeys = byProv[p.name]||[];
+      const safe = p.name.replace(/[^a-zA-Z0-9]/g,"_");
+      const keysHtml = provKeys.length ? provKeys.map(k=>`
+        <div class="item" style="margin-left:8px;margin-top:6px">
+          <div class="top">
+            <div class="name">${esc(k.label||"không tên")}</div>
+            <span class="badge ${k.enabled?'ok':'off'}" style="margin-left:auto">${k.enabled?"bật":"tắt"}</span>
+          </div>
+          <div class="mono">${esc(k.key_prefix)}…</div>
+          <div class="rowflex">
+            <button class="btn sm" onclick="toggleKey('${k.id}',${!k.enabled})">${k.enabled?"Tắt":"Bật"}</button>
+            <button class="btn sm danger" onclick="delKey('${k.id}')">Xóa key</button>
+          </div>
+        </div>`).join("") : `<div class="empty" style="margin-left:8px;margin-top:6px">Chưa có key.</div>`;
+      return `
       <div class="item">
         <div class="top">
           <span class="badge neutral">${esc(p.label||p.name)}</span>
           <div class="name">${esc(p.base_url||"")}</div>
           <span class="badge ${p.connected?'ok':'off'}" style="margin-left:auto">${p.connected?"đã nối":"chưa key"}</span>
         </div>
-        <div class="kv"><span class="k">Key bật</span><span class="v">${esc(p.key_count)}</span></div>
         <div class="kv"><span class="k">Model bật</span><span class="v">${esc(p.model_count)}</span></div>
         <div class="rowflex">
-          <button class="btn sm danger" onclick="delProvider('${esc(p.name)}')">Xóa</button>
+          <button class="btn sm" onclick="toggleAddKey('${esc(p.name)}')">Thêm key</button>
+          <button class="btn sm danger" onclick="delProvider('${esc(p.name)}')">Xóa nhà cc</button>
         </div>
-      </div>`).join("");
+        <div id="addkey_${safe}" style="display:none;margin-top:8px">
+          <div class="grid2">
+            <div><label>Label</label><input id="ak_${safe}_label" placeholder="ví dụ: acc chính"></div>
+            <div><label>API key</label><input id="ak_${safe}_key" placeholder="sk-…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+            <div><label>Priority (số nhỏ ưu tiên trước)</label><input id="ak_${safe}_pri" type="number" value="0" inputmode="numeric"></div>
+          </div>
+          <button class="btn primary block" style="margin-top:8px" onclick="submitAddKey('${esc(p.name)}','${safe}')">Lưu key</button>
+        </div>
+        ${keysHtml}
+      </div>`;
+    }).join("");
   }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+}
+function toggleAddKey(name){
+  const safe = name.replace(/[^a-zA-Z0-9]/g,"_");
+  const el = $("addkey_"+safe);
+  if(el) el.style.display = el.style.display==="none"?"block":"none";
+}
+async function submitAddKey(prov,safe){
+  const label = $("ak_"+safe+"_label").value.trim()||"key";
+  const key = $("ak_"+safe+"_key").value.trim();
+  if(!key){ toast("Nhập API key"); return; }
+  const priority = parseInt($("ak_"+safe+"_pri").value||"0",10)||0;
+  try{
+    await api("/gateway/keys",{method:"POST",body:JSON.stringify({provider:prov,label,key,priority})});
+    toast("Đã thêm key"); loadProviders();
+  }catch(e){ toast("Lỗi: "+e.message); }
 }
 async function delProvider(name){
   if(!confirm("Xóa nhà cung cấp '"+name+"' cùng key và model của nó?")) return;
-  try{ await api("/gateway/providers/"+encodeURIComponent(name),{method:"DELETE"}); toast("Đã xóa"); loadProviders(); loadKeys(); loadModels(); }
+  try{ await api("/gateway/providers/"+encodeURIComponent(name),{method:"DELETE"}); toast("Đã xóa"); loadProviders(); loadModels(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 
