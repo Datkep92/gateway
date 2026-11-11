@@ -471,6 +471,10 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
           <h3>🔑 Danh sách key <span class="tag" id="keysCount"></span></h3>
           <div id="keysList" class="list"></div>
         </div>
+        <div class="card">
+          <h3>🏢 Nhà cung cấp <span class="tag" id="providersCount"></span></h3>
+          <div id="providersList" class="list"></div>
+        </div>
       </section>
 
       <!-- models -->
@@ -955,7 +959,7 @@ function show(id){
   if($("pageTitle")) $("pageTitle").textContent = TITLES[id]||"Gateway";
   window.scrollTo({top:0,behavior:"smooth"});
   if(id==="dashboard") loadDashboard();
-  if(id==="keys") loadKeys();
+  if(id==="keys"){ loadKeys(); loadProviders(); }
   if(id==="models") loadModels();
   if(id==="logs") loadLogs();
   if(id==="settings") loadSettings();
@@ -1041,6 +1045,33 @@ async function toggleKey(id,enabled){
 async function delKey(id){
   if(!confirm("Xóa key này?")) return;
   try{ await api("/gateway/keys/"+id,{method:"DELETE"}); toast("Đã xóa key"); loadKeys(); }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
+async function loadProviders(){
+  const el=$("providersList"); skeletons(el,2);
+  try{
+    const d = await api("/gateway/providers");
+    const ps = d.providers||[];
+    $("providersCount").textContent = ps.length+" nhà cc";
+    if(!ps.length){ el.innerHTML = emptyBox("🏢","Chưa có nhà cung cấp."); return; }
+    el.innerHTML = ps.map(p=>`
+      <div class="item">
+        <div class="top">
+          <span class="badge neutral">${esc(p.label||p.name)}</span>
+          <div class="name">${esc(p.base_url||"")}</div>
+          <span class="badge ${p.connected?'ok':'off'}" style="margin-left:auto">${p.connected?"đã nối":"chưa key"}</span>
+        </div>
+        <div class="kv"><span class="k">Key bật</span><span class="v">${esc(p.key_count)}</span></div>
+        <div class="kv"><span class="k">Model bật</span><span class="v">${esc(p.model_count)}</span></div>
+        <div class="rowflex">
+          <button class="btn sm danger" onclick="delProvider('${esc(p.name)}')">Xóa</button>
+        </div>
+      </div>`).join("");
+  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+}
+async function delProvider(name){
+  if(!confirm("Xóa nhà cung cấp '"+name+"' cùng key và model của nó?")) return;
+  try{ await api("/gateway/providers/"+encodeURIComponent(name),{method:"DELETE"}); toast("Đã xóa"); loadProviders(); loadKeys(); loadModels(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 

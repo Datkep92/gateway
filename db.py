@@ -268,8 +268,47 @@ def list_providers():
         out.append(d)
     return out
 
+def delete_provider(name):
+    """Xoá một nhà cung cấp cùng toàn bộ API key và model của nó."""
+    n = (name or "").strip()
+    if not n:
+        return False
+    # cho phép tên chuẩn hoặc tên đang có trong bảng providers
+    c = conn()
+    row = c.execute("SELECT name FROM providers WHERE name=?", (n,)).fetchone()
+    if row is None:
+        # thử chuẩn hoá qua canonical (chỉ built-in)
+        try:
+            import providers as P
+            cn = P.canonical(n)
+        except Exception:
+            cn = None
+        if cn:
+            row = c.execute("SELECT name FROM providers WHERE name=?", (cn,)).fetchone()
+            if row is not None:
+                n = cn
+    if row is None:
+        c.close()
+        return False
+    c.execute("DELETE FROM api_keys WHERE provider=?", (n,))
+    c.execute("DELETE FROM gateway_models WHERE provider=?", (n,))
+    c.execute("DELETE FROM providers WHERE name=?", (n,))
+    c.commit()
+    c.close()
+    # nếu model mặc định bị xoá theo, xoá setting để máy tự chọn lại
+    dm = get_setting("default_model", "") or ""
+    if dm:
+        c = conn()
+        exists = c.execute("SELECT 1 FROM gateway_models WHERE id=?", (dm,)).fetchone()
+        c.close()
+        if not exists:
+            set_setting("default_model", "")
+    return True
+
+
 # helpers
 def now(): return time.time()
+
 
 def hash_key(plaintext):
     return hashlib.sha256(plaintext.encode()).hexdigest()

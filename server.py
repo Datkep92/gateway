@@ -897,6 +897,14 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             c.close()
             json_response(self, 200, {"ok": True})
             return
+        if path.startswith("/gateway/providers/"):
+            name = urllib.parse.unquote(path.split("/gateway/providers/", 1)[-1])
+            ok = db.delete_provider(name)
+            if not ok:
+                json_response(self, 404, {"error": {"message": "provider not found"}})
+                return
+            json_response(self, 200, {"ok": True})
+            return
         json_response(self, 404, {"error":{"message":"not found"}})
 
     def log_message(self, format, *args):
