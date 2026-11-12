@@ -44,7 +44,7 @@ def main():
     cert, key = ("", "")
     if tls_enabled:
         cert, key = ensure_tls_cert()
-    print(f"Gateway starting on {host}:{port} (tls={tls_enabled})")
+    print(f"Gateway starting on {host}:{port} (tls={tls_enabled})", flush=True)
     httpd = server.make_server(host, port, use_tls=tls_enabled, certfile=cert or None, keyfile=key or None)
     try:
         httpd.serve_forever()

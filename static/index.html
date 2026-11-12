@@ -109,7 +109,7 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
 .topbar{
   position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
   padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));
-  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.6) blur(16px);
+  background:var(--bg);background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.6) blur(16px);
   -webkit-backdrop-filter:saturate(1.6) blur(16px);border-bottom:1px solid var(--border);
 }
 .topbar .title{font-size:17px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -208,7 +208,7 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
 /* bottom nav (mobile) */
 .bottomnav{
   position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(6,1fr);
-  background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(18px);
+  background:var(--card);background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(18px);
   -webkit-backdrop-filter:blur(18px);border-top:1px solid var(--border);
   padding:6px 4px calc(6px + env(safe-area-inset-bottom));
 }
@@ -217,7 +217,7 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
   font-size:10.5px;font-weight:600;color:var(--muted);transition:color .18s,background .18s,transform .12s;
 }
 .bottomnav button .ico{font-size:19px;line-height:1;transition:transform .18s}
-.bottomnav button.active{color:var(--text);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.bottomnav button.active{color:var(--text);background:rgba(108,140,255,.14);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .bottomnav button.active .ico{transform:translateY(-1px) scale(1.08)}
 .bottomnav button:active{transform:scale(.94)}
 
@@ -233,7 +233,7 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
 /* sticky save bar */
 .savebar{
   position:fixed;left:0;right:0;bottom:calc(66px + env(safe-area-inset-bottom));z-index:25;
-  padding:10px 16px;background:color-mix(in srgb,var(--bg) 86%,transparent);
+  padding:10px 16px;background:var(--bg);background:color-mix(in srgb,var(--bg) 86%,transparent);
   backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--border);
   display:none;
 }
@@ -244,7 +244,7 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
   .app.ready{display:grid;grid-template-columns:252px 1fr;min-height:100vh}
   .sidebar{
     display:flex;flex-direction:column;gap:6px;padding:20px 14px;border-right:1px solid var(--border);
-    background:color-mix(in srgb,var(--card) 55%,transparent);position:sticky;top:0;height:100vh;
+    background:var(--card);background:color-mix(in srgb,var(--card) 55%,transparent);position:sticky;top:0;height:100vh;
   }
   .sidebar .brand{margin:0 6px 18px}
   .sidebar .brand h1{font-size:18px}
@@ -338,9 +338,6 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
   .stats{grid-template-columns:repeat(4,minmax(0,1fr))}
   .list{gap:12px}
   .card{padding:20px}
-}
-@media (min-width: 1100px){
-  .bottomnav{max-width:1180px;left:50%;transform:translateX(-50%);border-radius:18px 18px 0 0}
 }
 </style>
 </head>
@@ -633,6 +630,8 @@ const TITLES = {dashboard:"Tổng quan",keys:"API keys",models:"Models",logs:"Lo
 
 /* ---------- utils ---------- */
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+/* jsq: chuỗi động đặt trong thuộc tính onclick="…'${jsq(x)}'…" — an toàn cho cả chuỗi JS trong attribute; esc() chỉ dùng cho nội dung chữ/HTML */
+function jsq(s){ return String(s==null?"":s).replace(/[\\'\"&<>\r\n]/g,c=>({"\\":"\\\\","'":"\\'",'"':"&quot;","&":"&amp;","<":"&lt;",">":"&gt;","\r":"\\r","\n":"\\n"}[c])); }
 let toastTimer=null;
 function toast(msg){
   const t=$("toast"); t.textContent=msg; t.classList.add("show");
@@ -889,7 +888,7 @@ function renderSetupDone(d){
     ${hasKey ? `
       <label>Client key (dán vào app của bạn)</label>
       <div class="copybox" id="doneKey" style="margin-bottom:8px">${esc(d.client_key)}</div>
-      <button class="btn sm" style="margin-bottom:14px" onclick="copyValue('${esc(d.client_key)}','client key')">📋 Copy client key</button>
+      <button class="btn sm" style="margin-bottom:14px" onclick="copyValue('${jsq(d.client_key)}','client key')">📋 Copy client key</button>
     ` : `
       <div class="errbox"><span>🔐</span><div><b>Máy đã có client key</b>
         <div class="mono">Vì an toàn, key cũ không hiện lại. Dán key bạn đã lưu để vào bảng điều khiển.</div></div></div>
@@ -900,7 +899,7 @@ function renderSetupDone(d){
     <label>Kết nối cho app / script</label>
     <div class="copybox" style="margin-bottom:6px">${esc(d.openai_base_url||"")}</div>
     <div class="mono" style="margin-bottom:10px">OpenAI: dùng địa chỉ này · Claude: ${esc(d.anthropic_base_url||"")}</div>
-    <button class="btn sm" style="margin-bottom:16px" onclick="copyValue('${esc(d.openai_base_url||"")}','base URL')">📋 Copy base URL</button>
+    <button class="btn sm" style="margin-bottom:16px" onclick="copyValue('${jsq(d.openai_base_url||"")}','base URL')">📋 Copy base URL</button>
 
     <button class="btn primary block" onclick="finishSetup()">🚀 Vào bảng điều khiển</button>
     <button class="btn block" style="margin-top:8px" onclick="closeSetup()">Đóng</button>`;
@@ -1101,7 +1100,7 @@ async function loadDashboard(){
       api("/gateway/models").catch(()=>({models:[]})),
       api("/gateway/logs?limit=200").catch(()=>({logs:[]}))
     ]);
-    setConn(true);
+    setConn(!!st);
     CACHE.keys = keys.keys||[]; CACHE.models = models.models||[];
     const kl=CACHE.keys, ml=CACHE.models, lg=logs.logs||[];
     const okKeys = kl.filter(k=>k.enabled).length;
@@ -1123,46 +1122,7 @@ async function loadDashboard(){
     $("statBox").innerHTML = emptyBox("⚠️","Không kết nối được gateway. Kiểm tra key hoặc server.");
   }
 }
-async function testModels(){
-  try{
-    const r = await fetch(BASE_URL+"/v1/models",{headers:{"Authorization":"Bearer "+CLIENT_KEY}});
-    const t = await r.text();
-    toast(r.ok ? "OK "+r.status+" · "+t.slice(0,60) : "Lỗi "+r.status);
-  }catch(e){ toast("Lỗi: "+e.message); }
-}
-
 /* ---------- keys ---------- */
-async function loadKeys(){
-  const el=$("keysList"); skeletons(el,3);
-  try{
-    const d = await api("/gateway/keys");
-    CACHE.keys = d.keys||[];
-    $("keysCount").textContent = CACHE.keys.length+" key";
-    if(!CACHE.keys.length){ el.innerHTML = emptyBox("🔑","Chưa có key nào. Thêm key ở khung phía trên."); return; }
-    el.innerHTML = CACHE.keys.map(k=>`
-      <div class="item">
-        <div class="top">
-          <span class="badge neutral">${esc(k.provider)}</span>
-          <div class="name">${esc(k.label||"không tên")}</div>
-          <span class="badge ${k.enabled?'ok':'off'}" style="margin-left:auto">${k.enabled?"bật":"tắt"}</span>
-        </div>
-        <div class="mono">${esc(k.key_prefix)}…</div>
-        <div class="kv"><span class="k">Số lần lỗi</span><span class="v">${esc(k.failure_count)}</span></div>
-        <div class="rowflex">
-          <button class="btn sm" onclick="toggleKey('${k.id}',${!k.enabled})">${k.enabled?"Tắt":"Bật"}</button>
-          <button class="btn sm danger" onclick="delKey('${k.id}')">Xóa</button>
-        </div>
-      </div>`).join("");
-  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
-}
-async function addKey(){
-  if(!$("newKey").value.trim()){ toast("Nhập API key"); return; }
-  const body={provider:$("newProvider").value,label:$("newLabel").value.trim()||"key",key:$("newKey").value.trim(),priority:parseInt($("newPriority").value||"0",10)||0};
-  try{
-    await api("/gateway/keys",{method:"POST",body:JSON.stringify(body)});
-    $("newLabel").value=""; $("newKey").value=""; toast("Đã thêm key"); loadKeys();
-  }catch(e){ toast("Lỗi: "+e.message); }
-}
 async function testKey(id){
   try{ const r=await api("/gateway/keys/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Key OK":"Key lỗi: "+(r.message||"")); loadProviders(); }
   catch(e){ toast("Lỗi: "+e.message); }
@@ -1246,7 +1206,7 @@ function renderProviders(){
         : (p.label || p.name);
       return `
       <div class="item prov-item" id="prov_${safe}">
-        <button type="button" class="prov-head" onclick="toggleProvDetail('${esc(p.name)}')">
+        <button type="button" class="prov-head" onclick="toggleProvDetail('${jsq(p.name)}')">
           <div class="prov-meta">
             <div class="prov-line1">
               <span class="prov-name">${esc(displayName)}</span>
@@ -1267,18 +1227,18 @@ function renderProviders(){
             <span style="font-size:11.5px;color:var(--muted);font-weight:600;min-width:32px">${esc(p.protocol||"–")}</span>
             <span class="mono" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${esc(p.base_url||"–")}</span>
             <span class="prov-url-btns">
-              <button class="btn sm" onclick="event.stopPropagation();copyValue('${esc(p.base_url||"")}','URL')" title="Copy URL">📋</button>
-              <button class="btn sm" onclick="event.stopPropagation();window.open('${esc(p.base_url||"")}','_blank')" title="Mở URL">↗</button>
-              ${p.key_url?`<button class="btn sm" onclick="event.stopPropagation();copyValue('${esc(p.key_url)}','Web')" title="Copy web">📋</button>
-              <button class="btn sm" onclick="event.stopPropagation();window.open('${esc(p.key_url)}','_blank')" title="Mở web">↗</button>`:""}
+              <button class="btn sm" onclick="event.stopPropagation();copyValue('${jsq(p.base_url||"")}','URL')" title="Copy URL">📋</button>
+              <button class="btn sm" onclick="event.stopPropagation();window.open('${jsq(p.base_url||"")}','_blank')" title="Mở URL">↗</button>
+              ${p.key_url?`<button class="btn sm" onclick="event.stopPropagation();copyValue('${jsq(p.key_url)}','Web')" title="Copy web">📋</button>
+              <button class="btn sm" onclick="event.stopPropagation();window.open('${jsq(p.key_url)}','_blank')" title="Mở web">↗</button>`:""}
             </span>
           </div>
           <div class="prov-keys">${keysHtml}</div>
           <div class="prov-models" id="prov_models_${safe}"></div>
           <div class="rowflex" style="margin-top:4px;gap:4px;flex-wrap:wrap">
-            <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${esc(p.name)}')" title="Thêm key">➕ Key</button>
-            <button class="btn sm" onclick="event.stopPropagation();reloadProvModels('${esc(p.name)}','${safe}')" title="Tải DS model">🔄 Model</button>
-            <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${esc(p.name)}')" title="Xóa ncc">🗑</button>
+            <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${jsq(p.name)}')" title="Thêm key">➕ Key</button>
+            <button class="btn sm" onclick="event.stopPropagation();reloadProvModels('${jsq(p.name)}','${safe}')" title="Tải DS model">🔄 Model</button>
+            <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${jsq(p.name)}')" title="Xóa ncc">🗑</button>
           </div>
           <div id="addkey_${safe}" style="display:none;margin-top:8px">
             <div class="grid2">
@@ -1286,7 +1246,7 @@ function renderProviders(){
               <div><label>API key</label><input id="ak_${safe}_key" placeholder="sk-…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
               <div><label>Priority</label><input id="ak_${safe}_pri" type="number" value="0" inputmode="numeric"></div>
             </div>
-            <button class="btn primary block" style="margin-top:8px" onclick="submitAddKey('${esc(p.name)}','${safe}')">💾 Lưu key</button>
+            <button class="btn primary block" style="margin-top:8px" onclick="submitAddKey('${jsq(p.name)}','${safe}')">💾 Lưu key</button>
           </div>
           <div id="reloadbox_${safe}" style="display:none" class="prov-reload-box"></div>
         </div>
@@ -1350,7 +1310,7 @@ async function reloadProvModels(name, safe){
           <span class="prov-model-name">${esc(id)}</span>
         </label>`).join("") +
       `<div class="rowflex" style="margin-top:8px;gap:4px">
-        <button class="btn sm" onclick="event.stopPropagation();saveProvModels('${esc(name)}','${safe}')">💾 Lưu chọn</button>
+        <button class="btn sm" onclick="event.stopPropagation();saveProvModels('${jsq(name)}','${safe}')">💾 Lưu chọn</button>
         <button class="btn sm" onclick="event.stopPropagation();selectAllProvModels('${safe}',true)">Chọn hết</button>
         <button class="btn sm" onclick="event.stopPropagation();selectAllProvModels('${safe}',false)">Bỏ hết</button>
       </div>`;
