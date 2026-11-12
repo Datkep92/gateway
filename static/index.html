@@ -480,7 +480,6 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
     <header class="topbar">
       <div class="title" id="pageTitle">Tổng quan</div>
       <span class="pill"><span class="dot" id="connDot"></span><span id="connTxt">offline</span></span>
-      <button class="iconbtn mobonly" onclick="openSetup()" aria-label="Thiết lập nhanh">⚡</button>
       <button class="iconbtn mobonly" onclick="toggleTheme()" id="themeIcoM">🌙</button>
       <button class="iconbtn mobonly" onclick="logout()">🚪</button>
     </header>
@@ -496,6 +495,8 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
             <h3>⚡ Thao tác nhanh</h3>
             <div class="actions">
               <button class="btn" onclick="loadDashboard()">↻ Làm mới</button>
+              <button class="btn" onclick="openSetup()">⚡ Thiết lập 1 bước</button>
+              <button class="btn" onclick="location.reload()">↻ Tải lại trang</button>
             </div>
           </div>
           <div class="card">
