@@ -934,6 +934,10 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             kid = path.split("/")[-1]
             if "enabled" in j:
                 keypool.set_enabled(kid, bool(j["enabled"]))
+            if "label" in j:
+                keypool.update_key(kid, label=j["label"])
+            if "priority" in j:
+                keypool.update_key(kid, priority=int(j["priority"]))
             json_response(self, 200, {"ok": True})
             return
         if path.startswith("/gateway/models/"):

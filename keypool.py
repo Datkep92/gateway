@@ -26,6 +26,15 @@ def delete_key(kid):
     c.commit()
     c.close()
 
+def update_key(kid, label=None, priority=None):
+    c = db.conn()
+    if label is not None:
+        c.execute("UPDATE api_keys SET label=? WHERE id=?", (label, kid))
+    if priority is not None:
+        c.execute("UPDATE api_keys SET priority=? WHERE id=?", (priority, kid))
+    c.commit()
+    c.close()
+
 def set_enabled(kid, enabled):
     c = db.conn()
     c.execute("UPDATE api_keys SET enabled=? WHERE id=?", (1 if enabled else 0, kid))

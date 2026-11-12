@@ -47,6 +47,12 @@ input,select,textarea{
   padding:12px 14px;min-height:48px;font-size:16px;appearance:none;-webkit-appearance:none;
   transition:border-color .16s,box-shadow .16s,background .16s;
 }
+input[type="checkbox"],input[type="radio"]{
+  width:20px;height:20px;min-height:0;padding:0;border-radius:4px;
+  appearance:auto;-webkit-appearance:checkbox;background:transparent;
+  border:1px solid var(--border2);cursor:pointer;flex-shrink:0;
+  accent-color:var(--accent);
+}
 textarea{min-height:96px;resize:vertical}
 input::placeholder{color:var(--muted2)}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(108,140,255,.16)}
@@ -172,6 +178,12 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
 .prov-model-chk{width:auto;margin:0;flex-shrink:0}
 .prov-reload-box{margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg2)}
 .prov-keys{display:grid;gap:6px;margin-top:6px}
+.prov-key-row{border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:var(--bg2)}
+.prov-key-main{display:flex;align-items:center;gap:6px;min-width:0}
+.prov-key-name{flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prov-key-btns{display:flex;gap:4px;flex-shrink:0}
+.prov-key-btns .btn.icon{padding:2px 6px;font-size:13px;line-height:1}
+.prov-key-edit{display:grid;gap:4px}
 .chev{font-size:16px;color:var(--muted);transition:transform .18s;line-height:1}
 .prov-item{padding:11px 13px}
 .item .top{display:flex;align-items:center;gap:10px;min-width:0}
@@ -1162,6 +1174,18 @@ async function delKey(id){
   try{ await api("/gateway/keys/"+id,{method:"DELETE"}); toast("Đã xóa key"); loadProviders(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
+function toggleEditKey(id){
+  const el = document.getElementById("keyedit_"+id);
+  if(el) el.style.display = el.style.display==="none"?"block":"none";
+}
+async function saveEditKey(id){
+  const label = document.getElementById("ke_"+id+"_label").value.trim();
+  const pri = parseInt(document.getElementById("ke_"+id+"_pri").value||"0",10)||0;
+  try{
+    await api("/gateway/keys/"+id,{method:"PATCH",body:JSON.stringify({label,priority:pri})});
+    toast("Đã lưu key"); loadProviders();
+  }catch(e){ toast("Lỗi: "+e.message); }
+}
 async function loadProviders(){
   const el=$("providersList"); skeletons(el,2);
   try{
@@ -1177,18 +1201,27 @@ async function loadProviders(){
       const provKeys = byProv[p.name]||[];
       const safe = p.name.replace(/[^a-zA-Z0-9]/g,"_");
       const keysHtml = provKeys.length ? provKeys.map(k=>`
-        <div class="item" style="margin-top:6px">
-          <div class="top">
-            <div class="name">${esc(k.label||"không tên")}</div>
-            <span class="badge ${k.health==='ok'?'ok':(k.health==='fail'?'off':'neutral')}" style="margin-left:auto">${esc(k.health||'chưa test')}</span>
-            <span class="badge ${k.enabled?'ok':'off'}">${k.enabled?"bật":"tắt"}</span>
+        <div class="prov-key-row" id="keyrow_${k.id}">
+          <div class="prov-key-main">
+            <span class="prov-key-name" title="${esc(k.label||"không tên")}">${esc(k.label||"không tên")}</span>
+            <span class="prov-key-btns">
+              <button class="btn sm icon" onclick="event.stopPropagation();testKey('${k.id}')" title="Test key">🧪</button>
+              <button class="btn sm icon" onclick="event.stopPropagation();toggleKey('${k.id}',${!k.enabled})" title="${k.enabled?'Tắt':'Bật'}">${k.enabled?'🟢':'⚪'}</button>
+              <button class="btn sm icon" onclick="event.stopPropagation();toggleEditKey('${k.id}')" title="Sửa key">✏️</button>
+            </span>
+            <span class="badge ${k.health==='ok'?'ok':(k.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${k.health==='ok'?'✓':(k.health==='fail'?'✗':'?')}</span>
           </div>
-          <div class="mono">${esc(k.key_prefix)}…</div>
-          ${k.last_test_message?`<div class="kv"><span class="k">Kết quả test</span><span class="v">${esc(k.last_test_message)}</span></div>`:""}
-          <div class="rowflex">
-            <button class="btn sm" onclick="testKey('${k.id}')">Test key</button>
-            <button class="btn sm" onclick="toggleKey('${k.id}',${!k.enabled})">${k.enabled?"Tắt":"Bật"}</button>
-            <button class="btn sm danger" onclick="delKey('${k.id}')">Xóa key</button>
+          <div id="keyedit_${k.id}" class="prov-key-edit" style="display:none">
+            <div class="mono" style="margin-top:4px;font-size:11px">${esc(k.key_prefix)}…</div>
+            ${k.last_test_message?`<div class="kv"><span class="k">Kết quả test</span><span class="v">${esc(k.last_test_message)}</span></div>`:""}
+            <div class="grid2" style="margin-top:6px">
+              <div><label>Label</label><input id="ke_${k.id}_label" value="${esc(k.label||"")}" placeholder="label"></div>
+              <div><label>Priority</label><input id="ke_${k.id}_pri" type="number" value="${k.priority||0}" inputmode="numeric"></div>
+            </div>
+            <div class="rowflex" style="margin-top:6px;gap:4px">
+              <button class="btn sm primary" onclick="event.stopPropagation();saveEditKey('${k.id}')">💾 Lưu</button>
+              <button class="btn sm danger" onclick="event.stopPropagation();delKey('${k.id}')">🗑 Xóa</button>
+            </div>
           </div>
         </div>`).join("") : `<div class="empty" style="margin-top:6px">Chưa có key.</div>`;
       const displayName = (p.name === "custom" && (p.key_url||p.base_url))
