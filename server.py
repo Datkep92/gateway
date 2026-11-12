@@ -640,6 +640,16 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
 
         # 4. lưu địa chỉ/giao thức (tạo row nếu ncc đã bị xoá / chưa có)
         import uuid as _uuid
+        was_custom = (chosen == "custom")
+        if was_custom and base_used:
+            # mỗi base URL là một nhà cung cấp riêng: dùng base_url làm tên
+            c = db.conn()
+            existing = c.execute("SELECT name FROM providers WHERE base_url=?", (base_used,)).fetchone()
+            c.close()
+            if existing:
+                chosen = existing["name"]
+            else:
+                chosen = base_used
         c = db.conn()
         row = c.execute("SELECT name FROM providers WHERE name=?", (chosen,)).fetchone()
         c.close()
@@ -656,8 +666,8 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                        sp.get("key_url") or ""))
             c.commit()
             c.close()
-        if chosen == "custom":
-            db.update_provider("custom", base_url=base_used, protocol=protocol,
+        if was_custom:
+            db.update_provider(chosen, base_url=base_used, protocol=protocol,
                                chat_path="/v1/chat/completions", messages_path="/v1/messages",
                                models_path=models_path or "/v1/models", enabled=1)
         elif raw_base:

@@ -1201,7 +1201,7 @@ function renderProviders(){
             </div>
           </div>
         </div>`).join("") : `<div class="empty" style="margin-top:6px">Chưa có key.</div>`;
-      const displayName = (p.name === "custom" && (p.key_url||p.base_url))
+      const displayName = (p.name !== "openai" && p.name !== "anthropic" && p.name !== "deepseek" && p.name !== "opencode" && (p.key_url||p.base_url))
         ? (p.key_url || p.base_url)
         : (p.label || p.name);
       return `
@@ -1210,7 +1210,7 @@ function renderProviders(){
           <div class="prov-meta">
             <div class="prov-line1">
               <span class="prov-name">${esc(displayName)}</span>
-              ${p.key_url && p.name !== "custom" ? `<span class="prov-web">${esc(p.key_url)}</span>` : ""}
+              ${p.key_url && p.name !== "openai" && p.name !== "anthropic" && p.name !== "deepseek" && p.name !== "opencode" ? `<span class="prov-web">${esc(p.key_url)}</span>` : ""}
             </div>
             <div class="prov-line2">
               <span>${esc(p.key_count)} key</span>

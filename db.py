@@ -126,22 +126,38 @@ def init_db():
     # thêm khi cần qua /gateway/onboard, và có thể xoá vĩnh viễn.
     deleted = _deleted_providers()
     for name, spec in P.PROVIDERS.items():
-        if name != "custom":
+        if name == "custom":
+            # nhà cung cấp tự nhập: không seed sẵn, tạo khi thiết lập (với tên = base_url)
             continue
         if name in deleted:
             continue
         row = c.execute("SELECT id, base_url FROM providers WHERE name=?", (name,)).fetchone()
         if row is None:
             c.execute("""INSERT INTO providers(id,name,base_url,enabled,protocol,chat_path,messages_path,models_path,key_url)
-                         VALUES (?,?,?,1,?,?,?,?,?)""",
-                      (str(uuid.uuid4()), name, spec["base_url"], spec["protocol"],
-                       spec["chat_path"], spec["messages_path"], spec["models_path"], spec["key_url"]))
+                          VALUES (?,?,?,1,?,?,?,?,?)""",
+                       (str(uuid.uuid4()), name, spec["base_url"], spec["protocol"],
+                        spec["chat_path"], spec["messages_path"], spec["models_path"], spec["key_url"]))
         else:
             if spec.get("dynamic"):
                 # nhà cung cấp tự nhập: giao thức/đường dẫn do lúc thiết lập quyết định
                 continue
             c.execute("""UPDATE providers SET protocol=?,chat_path=?,messages_path=?,models_path=?,key_url=? WHERE name=?""",
-                      (spec["protocol"], spec["chat_path"], spec["messages_path"], spec["models_path"], spec["key_url"], name))
+                       (spec["protocol"], spec["chat_path"], spec["messages_path"], spec["models_path"], spec["key_url"], name))
+    # di chuyển nhà cung cấp tự nhập cũ (tên "custom" với base_url) sang tên = base_url
+    # để mỗi base URL là một nhà cung cấp riêng
+    try:
+        row = c.execute("SELECT base_url FROM providers WHERE name='custom'").fetchone()
+        if row and row["base_url"]:
+            bu = str(row["base_url"]).rstrip("/")
+            exists = c.execute("SELECT 1 FROM providers WHERE name=?", (bu,)).fetchone()
+            if not exists:
+                c.execute("UPDATE providers SET name=? WHERE name='custom'", (bu,))
+                c.execute("UPDATE api_keys SET provider=? WHERE provider='custom'", (bu,))
+                c.execute("UPDATE gateway_models SET provider=? WHERE provider='custom'", (bu,))
+        # xoá template "custom" rỗng (không còn dùng nữa)
+        c.execute("DELETE FROM providers WHERE name='custom' AND (base_url='' OR base_url IS NULL)")
+    except Exception:
+        pass
 
     # ---- model mặc định khi bảng còn trống ----
     if c.execute("SELECT COUNT(*) FROM gateway_models").fetchone()[0] == 0:
@@ -259,8 +275,8 @@ def list_models(enabled_only=False):
 
 # ---- provider ----
 def set_provider_base_url(name, url):
-    n = P.canonical(name)
-    if n is None or not url:
+    n = P.canonical(name) or name
+    if not n or not url:
         return False
     c = conn()
     c.execute("UPDATE providers SET base_url=? WHERE name=?", (str(url).rstrip("/"), n))
@@ -270,10 +286,10 @@ def set_provider_base_url(name, url):
 
 def update_provider(name, **fields):
     """Cập nhật vài cột của một provider (dùng cho nhà cung cấp tự nhập)."""
-    n = P.canonical(name)
+    n = P.canonical(name) or name
     allowed = ("base_url", "protocol", "chat_path", "messages_path", "models_path", "key_url", "enabled")
     cols = [(k, v) for k, v in fields.items() if k in allowed]
-    if n is None or not cols:
+    if not n or not cols:
         return False
     if "base_url" in dict(cols):
         cols = [(k, (str(v).rstrip("/") if k == "base_url" else v)) for k, v in cols]
@@ -527,6 +543,23 @@ def import_config(data, keep_client_key=None):
         except Exception:
             pass
         raise
+    # di chuyển nhà cung cấp tự nhập cũ (tên "custom" với base_url) sang tên = base_url
+    try:
+        c2 = sqlite3.connect(DB_PATH, timeout=30)
+        c2.row_factory = sqlite3.Row
+        row = c2.execute("SELECT base_url FROM providers WHERE name='custom'").fetchone()
+        if row and row["base_url"]:
+            bu = str(row["base_url"]).rstrip("/")
+            exists = c2.execute("SELECT 1 FROM providers WHERE name=?", (bu,)).fetchone()
+            if not exists:
+                c2.execute("UPDATE providers SET name=? WHERE name='custom'", (bu,))
+                c2.execute("UPDATE api_keys SET provider=? WHERE provider='custom'", (bu,))
+                c2.execute("UPDATE gateway_models SET provider=? WHERE provider='custom'", (bu,))
+        c2.execute("DELETE FROM providers WHERE name='custom' AND (base_url='' OR base_url IS NULL)")
+        c2.commit()
+        c2.close()
+    except Exception:
+        pass
     finally:
         c.close()
     counts["settings"] = len(settings)

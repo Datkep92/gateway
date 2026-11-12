@@ -142,12 +142,30 @@ _compiled = {name: [re.compile(p, re.I) for p in spec["free_rules"]] for name, s
 
 
 def canonical(name):
-    """Đổi tên người dùng nhập về tên chuẩn, hoặc None nếu không biết."""
+    """Đổi tên người dùng nhập về tên chuẩn, hoặc None nếu không biết.
+
+    Ngoài các nhà cung cấp có sẵn (openai, anthropic, ...), cũng chấp nhận
+    tên đang có trong bảng providers (ví dụ: base URL dùng làm tên cho nhà
+    cung cấp tự nhập) để mỗi base URL là một nhà cung cấp riêng.
+    """
     if not name:
         return None
-    n = str(name).strip().lower()
-    n = ALIASES.get(n, n)
-    return n if n in PROVIDERS else None
+    n = str(name).strip()
+    low = n.lower()
+    low = ALIASES.get(low, low)
+    if low in PROVIDERS:
+        return low
+    # nhà cung cấp tự nhập: tên = base URL, kiểm tra trong db
+    try:
+        import db
+        c = db.conn()
+        row = c.execute("SELECT name FROM providers WHERE name=?", (n,)).fetchone()
+        c.close()
+        if row is not None:
+            return n
+    except Exception:
+        pass
+    return None
 
 
 def spec(name):
@@ -155,17 +173,21 @@ def spec(name):
     n = canonical(name)
     if n is None:
         return None
-    out = dict(PROVIDERS[n])
+    if n in PROVIDERS:
+        out = dict(PROVIDERS[n])
+    else:
+        # nhà cung cấp tự nhập lưu trong db: dùng mẫu "custom"
+        out = dict(PROVIDERS.get("custom", {}))
     out["name"] = n
     try:
         import db
         c = db.conn()
-        row = c.execute("""SELECT base_url, protocol, chat_path, messages_path, models_path
+        row = c.execute("""SELECT base_url, protocol, chat_path, messages_path, models_path, key_url
                            FROM providers WHERE name=?""", (n,)).fetchone()
         c.close()
         if row is not None:
             keys = row.keys()
-            for f in ("protocol", "chat_path", "messages_path", "models_path"):
+            for f in ("protocol", "chat_path", "messages_path", "models_path", "key_url"):
                 v = row[f] if f in keys else None
                 if v:
                     out[f] = v
@@ -243,7 +265,10 @@ def is_free(provider, model_id):
     n = canonical(provider)
     if n is None or not model_id:
         return False
-    return any(rx.search(model_id) for rx in _compiled[n])
+    if n in _compiled:
+        return any(rx.search(model_id) for rx in _compiled[n])
+    # nhà cung cấp tự nhập (base URL làm tên): mặc định bật mọi model
+    return True
 
 
 def classify(provider, model_ids):
