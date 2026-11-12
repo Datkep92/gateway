@@ -595,10 +595,10 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
         <div class="card">
           <h3>🔌 Thông số kết nối</h3>
           <div class="stack">
-            <div><label>Base URL</label><div class="copybox" id="cfgBase"></div><button class="btn sm" style="margin-top:8px" onclick="copyValue(BASE_URL,'Base URL')">📋 Copy</button></div>
-            <div><label>Client key</label><div class="copybox" id="cfgKey"></div><button class="btn sm" style="margin-top:8px" onclick="copyValue(CLIENT_KEY,'Client key')">📋 Copy</button></div>
-            <div><label>Endpoint OpenAI</label><div class="copybox" id="cfgOpenAI"></div><button class="btn sm" style="margin-top:8px" onclick="copyValue(BASE_URL+'/v1','Endpoint OpenAI')">📋 Copy</button></div>
-            <div><label>Endpoint Anthropic</label><div class="copybox" id="cfgAnth"></div><button class="btn sm" style="margin-top:8px" onclick="copyValue(BASE_URL+'/v1','Endpoint Anthropic')">📋 Copy</button></div>
+            <div><label>Base URL</label><div class="rowflex" style="gap:8px;align-items:stretch"><div class="copybox" id="cfgBase" style="flex:1"></div><button class="btn sm" onclick="copyValue(BASE_URL,'Base URL')">📋</button></div></div>
+            <div><label>Client key</label><div class="rowflex" style="gap:8px;align-items:stretch"><div class="copybox" id="cfgKey" style="flex:1"></div><button class="btn sm" onclick="copyValue(CLIENT_KEY,'Client key')">📋</button></div></div>
+            <div><label>Endpoint OpenAI</label><div class="rowflex" style="gap:8px;align-items:stretch"><div class="copybox" id="cfgOpenAI" style="flex:1"></div><button class="btn sm" onclick="copyValue(BASE_URL+'/v1','Endpoint OpenAI')">📋</button></div></div>
+            <div><label>Endpoint Anthropic</label><div class="rowflex" style="gap:8px;align-items:stretch"><div class="copybox" id="cfgAnth" style="flex:1"></div><button class="btn sm" onclick="copyValue(BASE_URL+'/v1','Endpoint Anthropic')">📋</button></div></div>
           </div>
         </div>
         <div class="card">
