@@ -375,6 +375,11 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
           <input id="setupBase" placeholder="để trống = dùng địa chỉ mặc định" inputmode="url"
                  autocapitalize="off" autocorrect="off" spellcheck="false">
         </div>
+        <div>
+          <label>Đường dẫn web (tuỳ chọn)</label>
+          <input id="setupWebUrl" placeholder="https://..." inputmode="url"
+                 autocapitalize="off" autocorrect="off" spellcheck="false">
+        </div>
       </div>
 
       <div class="spread" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:12px">
@@ -393,18 +398,21 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
         </div>
       </details>
 
+      <div id="setupModelList" style="display:none;margin-top:12px"></div>
+
       <ul class="steps" style="margin-top:14px">
         <li>1. <b>Tự nhận diện</b> nhà cung cấp từ key và địa chỉ.</li>
-        <li>2. <b>Tự dò</b> danh sách model đang có.</li>
+        <li>2. <b>Tải danh sách model</b> để chọn những model muốn lưu.</li>
         <li>3. <b>Tự bật</b> model miễn phí và tạo client key cho bạn.</li>
       </ul>
 
       <div id="setupMsg"></div>
-      <button class="btn primary block" id="setupGo" onclick="runSetup()">Thiết lập ngay</button>
+      <button class="btn block" id="setupLoadModels" onclick="loadSetupModels()">Tải danh sách model</button>
+      <button class="btn primary block" id="setupGo" onclick="runSetup()" style="margin-top:8px">Thiết lập ngay</button>
       <button class="btn block" style="margin-top:8px" onclick="closeSetup()">Để sau</button>
     </div>
 
-    <div id="setupDone" style="display:none"></div>
+<div id="setupDone" style="display:none"></div>
   </div>
 </div>
 
@@ -696,6 +704,7 @@ function pickProv(id){
   $("setupKeyHint").textContent = p.kh ? "· " + p.kh : "";
   $("setupBaseHint").textContent = id==="custom" ? "· bắt buộc" : (p.base ? "· mặc định" : "· tự nhận diện");
   $("setupKeyUrl").textContent = p.url || "–";
+  if($("setupWebUrl")) $("setupWebUrl").value = p.url || "";
   renderProvGrid();
   const inp = $("setupKey"); if(inp) inp.focus();
 }
@@ -709,6 +718,10 @@ function openSetup(){
   $("setupGo").textContent="Thiết lập ngay";
   $("setupFree").classList.add("on");
   $("setupLabel").value="";
+  if($("setupWebUrl")) $("setupWebUrl").value="";
+  setupModels = [];
+  setupModelsLoaded = false;
+  if($("setupModelList")) { $("setupModelList").style.display="none"; $("setupModelList").innerHTML=""; }
   setupProv = "";
   pickProv("");
 }
@@ -725,11 +738,76 @@ function setupHeaders(){
   if(CLIENT_KEY) h["Authorization"]="Bearer "+CLIENT_KEY;
   return h;
 }
+let setupModels = [];
+let setupModelsLoaded = false;
+function renderSetupModelList(){
+  const box = $("setupModelList"); if(!box) return;
+  if(!setupModels.length){ box.style.display="none"; box.innerHTML=""; return; }
+  box.style.display="";
+  box.innerHTML = `<label>Danh sách model dò được (${setupModels.length}) — bỏ chọn nếu không muốn lưu</label>
+    <div class="list" style="max-height:220px;overflow:auto;margin-top:6px">
+      ${setupModels.map(m=>`<label class="rowflex" style="margin:4px 0">
+        <input type="checkbox" data-model="${esc(m.id)}" checked style="width:auto;margin:0">
+        <span class="mono" style="flex:1">${esc(m.id)}</span>
+        <span class="badge ${m.free?'ok':'neutral'}">${m.free?'miễn phí':'tính phí'}</span>
+      </label>`).join("")}
+    </div>`;
+}
+async function loadSetupModels(){
+  const key = $("setupKey").value.trim();
+  const base = $("setupBase").value.trim();
+  if(!key){ toast("Dán API key trước"); $("setupKey").focus(); return; }
+  if(setupProv==="custom" && !base){ toast("Nhà cung cấp khác cần base URL"); $("setupBase").focus(); return; }
+  const typed = ($("loginUrl").value.trim() || location.origin).replace(/\/+$/,"");
+  BASE_URL = typed;
+  const btn = $("setupLoadModels") || $("setupGo");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Đang tải...';
+  $("setupMsg").innerHTML = "";
+  const payload = {api_key:key, free_only:$("setupFree").classList.contains("on"), probe_only:true};
+  if(setupProv) payload.provider = setupProv;
+  if(base) payload.base_url = base;
+  const lbl = $("setupLabel").value.trim();
+  if(lbl) payload.label = lbl;
+  const web = $("setupWebUrl") ? $("setupWebUrl").value.trim() : "";
+  if(web) payload.web_url = web;
+  try{
+    const r = await fetch(BASE_URL+"/gateway/onboard",{method:"POST",headers:setupHeaders(),body:JSON.stringify(payload)});
+    let d = {}; try{ d = await r.json(); }catch(e){}
+    if(!r.ok) throw new Error((d.error&&d.error.message) || ("HTTP "+r.status));
+    setupModels = d.models || [];
+    setupModelsLoaded = true;
+    renderSetupModelList();
+    $("setupMsg").innerHTML = `<div class="okbox"><span>✅</span><div>Đã dò được ${setupModels.length} model. Chọn model muốn lưu rồi bấm “Thiết lập ngay”.</div></div>`;
+  }catch(e){
+    $("setupMsg").innerHTML = `<div class="errbox"><span>⚠️</span><div><b>Chưa tải được danh sách model</b><div class="mono" style="margin-top:4px">${esc(e.message)}</div></div></div>`;
+  }finally{
+    btn.disabled=false;
+    btn.textContent = btn.id==="setupLoadModels" ? "Tải danh sách model" : "Thiết lập ngay";
+  }
+}
+function collectSetupSelectedModels(){
+  if(!setupModelsLoaded) return null;
+  try{
+    const boxes = document.querySelectorAll("#setupModelList input[type=checkbox]");
+    if(boxes && boxes.length){
+      return Array.from(boxes).filter(b=>b.checked).map(b=>b.getAttribute("data-model"));
+    }
+  }catch(e){}
+  return setupModels.map(m=>m.id);
+}
 async function runSetup(){
   const key = $("setupKey").value.trim();
   const base = $("setupBase").value.trim();
   if(!key){ toast("Dán API key trước"); $("setupKey").focus(); return; }
   if(setupProv==="custom" && !base){ toast("Nhà cung cấp khác cần base URL"); $("setupBase").focus(); return; }
+  if(!setupModelsLoaded){
+    await loadSetupModels();
+    if(setupModelsLoaded){
+      $("setupMsg").innerHTML = `<div class="okbox"><span>✅</span><div>Đã tải danh sách model. Chọn model muốn lưu rồi bấm “Thiết lập ngay”.</div></div>`;
+    }
+    return;
+  }
   const typed = ($("loginUrl").value.trim() || location.origin).replace(/\/+$/,"");
   BASE_URL = typed;
   const btn = $("setupGo");
@@ -741,6 +819,10 @@ async function runSetup(){
   if(base) payload.base_url = base;
   const lbl = $("setupLabel").value.trim();
   if(lbl) payload.label = lbl;
+  const web = $("setupWebUrl") ? $("setupWebUrl").value.trim() : "";
+  if(web) payload.web_url = web;
+  const selected = collectSetupSelectedModels();
+  if(selected !== null) payload.selected_models = selected;
   try{
     const r = await fetch(BASE_URL+"/gateway/onboard",{method:"POST",headers:setupHeaders(),body:JSON.stringify(payload)});
     let d = {}; try{ d = await r.json(); }catch(e){}
@@ -1110,6 +1192,7 @@ async function loadProviders(){
         <div id="prov_detail_${safe}" class="prov-detail" style="display:none">
           <div class="kv"><span class="k">Giao thức</span><span class="v">${esc(p.protocol||"–")}</span></div>
           <div class="kv"><span class="k">URL</span><span class="v mono">${esc(p.base_url||"–")}</span></div>
+          ${p.key_url?`<div class="kv"><span class="k">Trang web</span><span class="v"><a href="${esc(p.key_url)}" target="_blank" rel="noopener">${esc(p.key_url)}</a></span></div>`:""}
           <div class="kv"><span class="k">Model bật</span><span class="v">${esc(p.model_count)}</span></div>
           <div class="prov-keys">${keysHtml}</div>
           <div class="rowflex" style="margin-top:2px">

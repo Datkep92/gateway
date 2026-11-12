@@ -134,6 +134,7 @@ DRIVER = """
   const say = (k,v) => console.log(k + ": " + (typeof v === "string" ? v : JSON.stringify(v)));
   openSetup(); pickProv("openai");
   $("setupKey").value = "sk-live-000"; $("setupBase").value = MOCK;
+  await loadSetupModels();
   await runSetup();
   const done = $("setupDone").innerHTML || "";
   const text = done.replace(/<[^>]+>/g," ").replace(/\\s+/g," ").trim();

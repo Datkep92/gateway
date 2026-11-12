@@ -598,6 +598,22 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                     "type":"invalid_request"}})
                 return
 
+        probe_only = bool(j.get("probe_only"))
+        spec = providers.spec(chosen) or {}
+        if probe_only:
+            probe_ids = list(ids) if ids else list(spec.get("default_models") or [])
+            models = [{"id": mid, "free": bool(providers.is_free(chosen, mid))} for mid in probe_ids]
+            json_response(self, 200, {
+                "ok": True, "provider": chosen, "label": spec.get("label", chosen),
+                "base_url": base_used or spec.get("base_url") or "",
+                "protocol": protocol, "detected_by": detected_by,
+                "models_path": models_path or spec.get("models_path") or "/v1/models",
+                "verify_ok": verify_ok, "verify_error": verify_msg,
+                "models": models,
+                "free_only": db.get_setting("free_models_only", "1") == "1",
+            })
+            return
+
         # 4. lưu địa chỉ/giao thức (tạo row nếu ncc đã bị xoá / chưa có)
         import uuid as _uuid
         c = db.conn()
@@ -628,6 +644,10 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             deleted.discard(chosen)
             db.set_setting("deleted_providers", ",".join(sorted(deleted)))
         spec = providers.spec(chosen) or {}
+        web_url_in = (j.get("web_url") or j.get("key_url") or "").strip()
+        if web_url_in:
+            db.update_provider(chosen, key_url=web_url_in)
+            spec = dict(spec); spec["key_url"] = web_url_in
 
         # 5. lưu key (cùng key thì dùng lại, không tạo trùng)
         c = db.conn()
@@ -645,6 +665,13 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             db.set_setting("free_models_only",
                            "1" if (fo is True or str(fo).lower() in ("1", "true", "yes", "on")) else "0")
         model_ids = list(ids) or list(spec.get("default_models") or [])
+        selected_models = j.get("selected_models")
+        if isinstance(selected_models, list):
+            if selected_models:
+                allowed = set(model_ids) if model_ids else set(selected_models)
+                model_ids = [m for m in selected_models if (not allowed or m in allowed)]
+            else:
+                model_ids = []
         if model_ids:
             db.upsert_models(chosen, model_ids)
         db.recompute_model_flags()
@@ -676,6 +703,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             "verify_ok": verify_ok, "verify_error": verify_msg,
             "key_id": key_id, "models": models,
             "free_only": db.get_setting("free_models_only", "1") == "1",
+            "web_url": (web_url_in or spec.get("key_url") or ""),
             "client_key": raw_client_key, "has_client_key": n > 0,
             "openai_base_url": "http://%s:%s/v1" % (host, port),
             "anthropic_base_url": "http://%s:%s" % (host, port),
