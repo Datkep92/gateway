@@ -1,4 +1,4 @@
-import http.server, socketserver, threading, time, json, os, urllib.parse, ssl, socket, sys
+import http.server, socketserver, threading, time, json, os, urllib.parse, ssl, socket, sys, gzip
 
 import db, keypool, proxy, rate_limit, providers, translate
 
@@ -176,9 +176,33 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
         ct = "text/html" if name.endswith(".html") else "text/plain"
         if name.endswith(".css"): ct="text/css"
         if name.endswith(".js"): ct="application/javascript"
+        # HTML luôn đọc từ đĩa mỗi request (để sửa thấy ngay) -> không cache.
+        # File css/js có thể cache lâu.
+        if name.endswith(".html"):
+            cache = "no-store"
+        else:
+            cache = "public, max-age=86400"
+        ae = self.headers.get("Accept-Encoding", "")
+        if "gzip" in ae and len(data) > 1024:
+            gz = gzip.compress(data, compresslevel=6)
+            if len(gz) < len(data):
+                data = gz
+                self.send_response(200)
+                self.send_header("Content-Type", ct)
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Vary", "Accept-Encoding")
+                self.send_header("Cache-Control", cache)
+                self.send_header("Content-Length", str(len(data)))
+                handle_cors(self)
+                self.end_headers()
+                try:
+                    self.wfile.write(data)
+                except BrokenPipeError:
+                    pass
+                return
         self.send_response(200)
         self.send_header("Content-Type", ct)
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.send_header("Content-Length", str(len(data)))
         handle_cors(self)
         self.end_headers()

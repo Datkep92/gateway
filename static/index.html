@@ -1440,7 +1440,8 @@ function renderModels(){
     return String(a.display_name||a.id||"").localeCompare(String(b.display_name||b.id||""));
   });
   if(!list.length){ el.innerHTML = emptyBox("🧠", rows.length?"Không có model nào khớp.":"Chưa có model nào."); return; }
-  el.innerHTML = list.map(m=>`
+  const shown = list.slice(0, 60);
+  el.innerHTML = shown.map(m=>`
     <div class="item">
       <div class="top">
         <span class="badge neutral">${esc(m.provider)}</span>
@@ -1455,7 +1456,7 @@ function renderModels(){
       <div class="mono" style="font-size:11px">${esc(m.id)}</div>
       <div class="kv" style="font-size:11.5px"><span class="k">URL</span><span class="v">${esc(provMap[m.provider]||"–")}</span></div>
       ${m.last_test_message?`<div class="kv" style="font-size:11.5px"><span class="k">Kết quả test</span><span class="v">${esc(m.last_test_message)}</span></div>`:""}
-    </div>`).join("");
+    </div>`).join("") + (list.length>60 ? `<div class="empty" style="padding:10px">Còn ${list.length-60} model — dùng ô tìm kiếm để lọc.</div>` : "");
 }
 async function toggleModel(id,enabled){
   try{ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); loadProviders(); }
