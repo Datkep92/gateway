@@ -513,6 +513,10 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
         <div class="page-head"><h2>Nhà cung cấp & API key</h2><p>Mỗi nhà cung cấp có thể có nhiều key; các key dùng chung model của nhà cung cấp đó.</p></div>
         <div class="card">
           <h3>🏢 Danh sách <span class="tag" id="providersCount"></span></h3>
+          <div class="rowflex" style="margin-bottom:8px">
+            <input id="providerSearch" placeholder="Tìm nhà cung cấp (tên, url)…" oninput="renderProviders()" style="flex:1">
+            <button class="btn sm" onclick="renderProviders()">🔍</button>
+          </div>
           <div id="providersList" class="list"></div>
         </div>
       </section>
@@ -1190,14 +1194,29 @@ async function loadProviders(){
   const el=$("providersList"); skeletons(el,2);
   try{
     const [pd,kd] = await Promise.all([api("/gateway/providers"), api("/gateway/keys")]);
-    const ps = pd.providers||[];
-    const ks = kd.keys||[];
-    CACHE.keys = ks;
-    $("providersCount").textContent = ps.length+" nhà cc";
-    if(!ps.length){ el.innerHTML = emptyBox("🏢","Chưa có nhà cung cấp. Onboard để thêm."); return; }
-    const byProv={};
-    ks.forEach(k=>{ (byProv[k.provider]||(byProv[k.provider]=[])).push(k); });
-    el.innerHTML = ps.map(p=>{
+    CACHE.providers = pd.providers||[];
+    CACHE.keys = kd.keys||[];
+    $("providersCount").textContent = CACHE.providers.length+" nhà cc";
+    renderProviders();
+  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+}
+function renderProviders(){
+  const el=$("providersList");
+  const q = ($("providerSearch")||{value:""}).value.trim().toLowerCase();
+  let ps = (CACHE.providers||[]).filter(p=>{
+    if(!q) return true;
+    const hay = [p.name,p.label,p.base_url,p.key_url].join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+  const ks = CACHE.keys||[];
+  if(!ps.length){
+    if(!(CACHE.providers||[]).length) el.innerHTML = emptyBox("🏢","Chưa có nhà cung cấp. Onboard để thêm.");
+    else el.innerHTML = emptyBox("🏢","Không có nhà cung cấp khớp.");
+    return;
+  }
+  const byProv={};
+  ks.forEach(k=>{ (byProv[k.provider]||(byProv[k.provider]=[])).push(k); });
+  el.innerHTML = ps.map(p=>{
       const provKeys = byProv[p.name]||[];
       const safe = p.name.replace(/[^a-zA-Z0-9]/g,"_");
       const keysHtml = provKeys.length ? provKeys.map(k=>`
@@ -1275,7 +1294,6 @@ async function loadProviders(){
         </div>
       </div>`;
     }).join("");
-  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
 }
 function toggleProvDetail(name){
   const safe = name.replace(/[^a-zA-Z0-9]/g,"_");
@@ -1429,17 +1447,16 @@ function renderModels(){
       <div class="top">
         <span class="badge neutral">${esc(m.provider)}</span>
         <div class="name">${esc(m.display_name||m.id)}</div>
-        <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="margin-left:auto">${esc(m.health||'chưa test')}</span>
-        <div class="switch ${m.enabled?'on':''}" onclick="toggleModel('${m.id}',${!m.enabled})"></div>
+        <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
+        <span class="prov-key-btns">
+          <button class="btn sm icon" onclick="testModel('${m.id}')" title="Test model">🧪</button>
+          <button class="btn sm icon" onclick="toggleModel('${m.id}',${!m.enabled})" title="${m.enabled?'Tắt':'Bật'}">${m.enabled?'🟢':'⚪'}</button>
+          <button class="btn sm icon danger" onclick="delModel('${m.id}')" title="Xóa model">🗑</button>
+        </span>
       </div>
-      <div class="mono">${esc(m.id)}</div>
-      <div class="kv"><span class="k">URL</span><span class="v">${esc(provMap[m.provider]||"–")}</span></div>
-      ${m.last_test_message?`<div class="kv"><span class="k">Kết quả test</span><span class="v">${esc(m.last_test_message)}</span></div>`:""}
-      <div class="rowflex">
-        <button class="btn sm" onclick="testModel('${m.id}')">Test model</button>
-        <button class="btn sm" onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?"Tắt":"Bật"}</button>
-        <button class="btn sm danger" onclick="delModel('${m.id}')">Xóa model</button>
-      </div>
+      <div class="mono" style="font-size:11px">${esc(m.id)}</div>
+      <div class="kv" style="font-size:11.5px"><span class="k">URL</span><span class="v">${esc(provMap[m.provider]||"–")}</span></div>
+      ${m.last_test_message?`<div class="kv" style="font-size:11.5px"><span class="k">Kết quả test</span><span class="v">${esc(m.last_test_message)}</span></div>`:""}
     </div>`).join("");
 }
 async function toggleModel(id,enabled){
@@ -1541,10 +1558,14 @@ async function loadSettings(){
     const cel=$("clientKeysList");
     cel.innerHTML = CACHE.clientKeys.length ? CACHE.clientKeys.map(k=>`
       <div class="item">
-        <div class="top"><div class="name">${esc(k.name)}</div>
-          <span class="badge ${k.enabled?'ok':'off'}" style="margin-left:auto">${k.enabled?"bật":"tắt"}</span></div>
-        <div class="kv"><span class="k">Tạo lúc</span><span class="v">${esc(new Date((k.created_at||0)*1000).toLocaleString())}</span></div>
-        <div class="rowflex"><button class="btn sm danger" onclick="delClientKey('${k.id}')">Xóa</button></div>
+        <div class="top">
+          <div class="name">${esc(k.name)}</div>
+          <span class="badge ${k.enabled?'ok':'off'}" style="font-size:10px;padding:1px 6px">${k.enabled?"bật":"tắt"}</span>
+          <span class="prov-key-btns">
+            <button class="btn sm icon danger" onclick="delClientKey('${k.id}')" title="Xóa">🗑</button>
+          </span>
+        </div>
+        <div class="mono" style="font-size:11px">Tạo lúc: ${esc(new Date((k.created_at||0)*1000).toLocaleString())}</div>
       </div>`).join("") : emptyBox("🔐","Chưa có client key nào.");
   }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
 }
