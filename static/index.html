@@ -158,6 +158,14 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
 .prov-head:focus{outline:none}
 .prov-meta{flex:1;min-width:0;display:grid;gap:2px}
 .prov-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:grid;gap:8px}
+.prov-line1{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.prov-name{font-weight:650;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.prov-web{font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:100%}
+.prov-line2{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.prov-sep{opacity:.5}
+.prov-url-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
+.prov-url-row .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.prov-url-btns{display:flex;gap:4px;flex-shrink:0}
 .prov-keys{display:grid;gap:6px;margin-top:6px}
 .chev{font-size:16px;color:var(--muted);transition:transform .18s;line-height:1}
 .prov-item{padding:11px 13px}
@@ -1178,21 +1186,45 @@ async function loadProviders(){
             <button class="btn sm danger" onclick="delKey('${k.id}')">Xóa key</button>
           </div>
         </div>`).join("") : `<div class="empty" style="margin-top:6px">Chưa có key.</div>`;
+      const displayName = (p.name === "custom" && (p.key_url||p.base_url))
+        ? (p.key_url || p.base_url)
+        : (p.label || p.name);
       return `
       <div class="item prov-item" id="prov_${safe}">
         <button type="button" class="prov-head" onclick="toggleProvDetail('${esc(p.name)}')">
-          <span class="badge neutral">${esc(p.label||p.name)}</span>
           <div class="prov-meta">
-            <div class="name">${esc(p.base_url||"")}</div>
-            <div class="sub">${esc(p.key_count)} key · ${esc(p.model_count)} model · ${p.connected?"đã nối":"chưa key"}</div>
+            <div class="prov-line1">
+              <span class="prov-name">${esc(displayName)}</span>
+              ${p.key_url && p.name !== "custom" ? `<span class="prov-web">${esc(p.key_url)}</span>` : ""}
+            </div>
+            <div class="prov-line2">
+              <span>${esc(p.key_count)} key</span>
+              <span class="prov-sep">·</span>
+              <span>${esc(p.model_count)} model</span>
+              <span class="prov-sep">·</span>
+              <span class="badge ${p.connected?'ok':'off'}" style="font-size:10.5px;padding:2px 8px">${p.connected?"đã nối":"chưa key"}</span>
+            </div>
           </div>
-          <span class="badge ${p.connected?'ok':'off'}">${p.connected?"đã nối":"chưa key"}</span>
           <span class="chev" id="chev_${safe}">▸</span>
         </button>
         <div id="prov_detail_${safe}" class="prov-detail" style="display:none">
           <div class="kv"><span class="k">Giao thức</span><span class="v">${esc(p.protocol||"–")}</span></div>
-          <div class="kv"><span class="k">URL</span><span class="v mono">${esc(p.base_url||"–")}</span></div>
-          ${p.key_url?`<div class="kv"><span class="k">Trang web</span><span class="v"><a href="${esc(p.key_url)}" target="_blank" rel="noopener">${esc(p.key_url)}</a></span></div>`:""}
+          <div class="prov-url-row">
+            <span class="k" style="font-size:12.5px;color:var(--muted);font-weight:600;min-width:40px">URL</span>
+            <span class="mono">${esc(p.base_url||"–")}</span>
+            <span class="prov-url-btns">
+              <button class="btn sm" onclick="event.stopPropagation();copyValue('${esc(p.base_url||"")}','URL')">📋 Copy</button>
+              <button class="btn sm" onclick="event.stopPropagation();window.open('${esc(p.base_url||"")}','_blank')">↗ Mở</button>
+            </span>
+          </div>
+          ${p.key_url?`<div class="prov-url-row">
+            <span class="k" style="font-size:12.5px;color:var(--muted);font-weight:600;min-width:40px">Trang web</span>
+            <span class="mono">${esc(p.key_url)}</span>
+            <span class="prov-url-btns">
+              <button class="btn sm" onclick="event.stopPropagation();copyValue('${esc(p.key_url)}','URL')">📋 Copy</button>
+              <button class="btn sm" onclick="event.stopPropagation();window.open('${esc(p.key_url)}','_blank')">↗ Mở</button>
+            </span>
+          </div>`:""}
           <div class="kv"><span class="k">Model bật</span><span class="v">${esc(p.model_count)}</span></div>
           <div class="prov-keys">${keysHtml}</div>
           <div class="rowflex" style="margin-top:2px">
