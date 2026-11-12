@@ -889,7 +889,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 return
             db.upsert_models(name, ids)
             db.recompute_model_flags()
-            json_response(self, 200, {"ok": True, "found": len(ids), "enabled": db.apply_models_policy()})
+            json_response(self, 200, {"ok": True, "found": len(ids), "models": ids, "enabled": db.apply_models_policy()})
             return
         if path == "/gateway/providers/base-url":
             ok = db.set_provider_base_url(j.get("provider"), j.get("base_url"))

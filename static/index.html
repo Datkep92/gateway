@@ -166,6 +166,11 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
 .prov-url-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
 .prov-url-row .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
 .prov-url-btns{display:flex;gap:4px;flex-shrink:0}
+.prov-model-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)}
+.prov-model-row:last-child{border-bottom:none}
+.prov-model-name{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prov-model-chk{width:auto;margin:0;flex-shrink:0}
+.prov-reload-box{margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg2)}
 .prov-keys{display:grid;gap:6px;margin-top:6px}
 .chev{font-size:16px;color:var(--muted);transition:transform .18s;line-height:1}
 .prov-item{padding:11px 13px}
@@ -1208,37 +1213,32 @@ async function loadProviders(){
           <span class="chev" id="chev_${safe}">▸</span>
         </button>
         <div id="prov_detail_${safe}" class="prov-detail" style="display:none">
-          <div class="kv"><span class="k">Giao thức</span><span class="v">${esc(p.protocol||"–")}</span></div>
           <div class="prov-url-row">
-            <span class="k" style="font-size:12.5px;color:var(--muted);font-weight:600;min-width:40px">URL</span>
-            <span class="mono">${esc(p.base_url||"–")}</span>
+            <span style="font-size:11.5px;color:var(--muted);font-weight:600;min-width:32px">${esc(p.protocol||"–")}</span>
+            <span class="mono" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${esc(p.base_url||"–")}</span>
             <span class="prov-url-btns">
-              <button class="btn sm" onclick="event.stopPropagation();copyValue('${esc(p.base_url||"")}','URL')">📋 Copy</button>
-              <button class="btn sm" onclick="event.stopPropagation();window.open('${esc(p.base_url||"")}','_blank')">↗ Mở</button>
+              <button class="btn sm" onclick="event.stopPropagation();copyValue('${esc(p.base_url||"")}','URL')" title="Copy URL">📋</button>
+              <button class="btn sm" onclick="event.stopPropagation();window.open('${esc(p.base_url||"")}','_blank')" title="Mở URL">↗</button>
+              ${p.key_url?`<button class="btn sm" onclick="event.stopPropagation();copyValue('${esc(p.key_url)}','Web')" title="Copy web">📋</button>
+              <button class="btn sm" onclick="event.stopPropagation();window.open('${esc(p.key_url)}','_blank')" title="Mở web">↗</button>`:""}
             </span>
           </div>
-          ${p.key_url?`<div class="prov-url-row">
-            <span class="k" style="font-size:12.5px;color:var(--muted);font-weight:600;min-width:40px">Trang web</span>
-            <span class="mono">${esc(p.key_url)}</span>
-            <span class="prov-url-btns">
-              <button class="btn sm" onclick="event.stopPropagation();copyValue('${esc(p.key_url)}','URL')">📋 Copy</button>
-              <button class="btn sm" onclick="event.stopPropagation();window.open('${esc(p.key_url)}','_blank')">↗ Mở</button>
-            </span>
-          </div>`:""}
-          <div class="kv"><span class="k">Model bật</span><span class="v">${esc(p.model_count)}</span></div>
           <div class="prov-keys">${keysHtml}</div>
-          <div class="rowflex" style="margin-top:2px">
-            <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${esc(p.name)}')">Thêm key</button>
-            <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${esc(p.name)}')">Xóa nhà cc</button>
+          <div class="prov-models" id="prov_models_${safe}"></div>
+          <div class="rowflex" style="margin-top:4px;gap:4px;flex-wrap:wrap">
+            <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${esc(p.name)}')" title="Thêm key">➕ Key</button>
+            <button class="btn sm" onclick="event.stopPropagation();reloadProvModels('${esc(p.name)}','${safe}')" title="Tải DS model">🔄 Model</button>
+            <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${esc(p.name)}')" title="Xóa ncc">🗑</button>
           </div>
           <div id="addkey_${safe}" style="display:none;margin-top:8px">
             <div class="grid2">
               <div><label>Label</label><input id="ak_${safe}_label" placeholder="ví dụ: acc chính"></div>
               <div><label>API key</label><input id="ak_${safe}_key" placeholder="sk-…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-              <div><label>Priority (số nhỏ ưu tiên trước)</label><input id="ak_${safe}_pri" type="number" value="0" inputmode="numeric"></div>
+              <div><label>Priority</label><input id="ak_${safe}_pri" type="number" value="0" inputmode="numeric"></div>
             </div>
-            <button class="btn primary block" style="margin-top:8px" onclick="submitAddKey('${esc(p.name)}','${safe}')">Lưu key</button>
+            <button class="btn primary block" style="margin-top:8px" onclick="submitAddKey('${esc(p.name)}','${safe}')">💾 Lưu key</button>
           </div>
+          <div id="reloadbox_${safe}" style="display:none" class="prov-reload-box"></div>
         </div>
       </div>`;
     }).join("");
@@ -1252,6 +1252,87 @@ function toggleProvDetail(name){
   const open = el.style.display==="none" || !el.style.display;
   el.style.display = open ? "block" : "none";
   if(chev) chev.textContent = open ? "▾" : "▸";
+  if(open){
+    if(!CACHE.models || !CACHE.models.length) loadModels().then(()=>renderProvModels(name, safe));
+    else renderProvModels(name, safe);
+  }
+}
+function renderProvModels(name, safe){
+  const el = $("prov_models_"+safe);
+  if(!el) return;
+  const models = (CACHE.models||[]).filter(m=>m.provider===name);
+  if(!models.length){ el.innerHTML=""; return; }
+  el.innerHTML = `<div style="font-size:11.5px;color:var(--muted);font-weight:600;margin:6px 0 2px">Model (${models.length})</div>` +
+    models.map(m=>`
+      <div class="prov-model-row">
+        <span class="prov-model-name" title="${esc(m.id)}">${esc(m.display_name||m.id)}</span>
+        <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
+        <span class="switch ${m.enabled?'on':''}" onclick="event.stopPropagation();toggleModel('${m.id}',${!m.enabled})" style="transform:scale(.8)"></span>
+        <button class="btn sm danger" onclick="event.stopPropagation();delProvModel('${m.id}','${safe}')" title="Xóa model" style="padding:2px 6px">🗑</button>
+      </div>`).join("");
+}
+async function delProvModel(id, safe){
+  const m = (CACHE.models||[]).find(x=>x.id===id);
+  const provName = m ? m.provider : null;
+  if(!confirm("Xóa model '"+id+"'?")) return;
+  try{ await api("/gateway/models/"+encodeURIComponent(id),{method:"DELETE"}); toast("Đã xóa model"); await loadModels();
+    if(provName) renderProvModels(provName, safe);
+  }
+  catch(e){ toast("Lỗi: "+e.message); }
+}
+async function reloadProvModels(name, safe){
+  const box = $("reloadbox_"+safe);
+  if(!box) return;
+  // toggle
+  if(box.style.display==="block"){ box.style.display="none"; box.innerHTML=""; return; }
+  box.style.display="block";
+  box.innerHTML = `<div style="color:var(--muted);font-size:12.5px">Đang tải danh sách model…</div>`;
+  try{
+    const r = await api("/gateway/providers/discover",{method:"POST",body:JSON.stringify({provider:name})});
+    const ids = r.models || [];
+    if(!ids.length){ box.innerHTML=`<div style="color:var(--muted);font-size:12.5px">Không tìm thấy model nào.</div>`; return; }
+    // get current enabled set
+    await loadModels();
+    const enabledSet = new Set((CACHE.models||[]).filter(m=>m.provider===name && m.enabled).map(m=>m.id));
+    box.innerHTML = `<div style="font-size:12.5px;font-weight:600;margin-bottom:6px">Chọn model sử dụng (${ids.length})</div>` +
+      ids.map(id=>`
+        <label class="prov-model-row" style="cursor:pointer">
+          <input type="checkbox" class="prov-model-chk" data-id="${esc(id)}" ${enabledSet.has(id)?"checked":""}>
+          <span class="prov-model-name">${esc(id)}</span>
+        </label>`).join("") +
+      `<div class="rowflex" style="margin-top:8px;gap:4px">
+        <button class="btn sm" onclick="event.stopPropagation();saveProvModels('${esc(name)}','${safe}')">💾 Lưu chọn</button>
+        <button class="btn sm" onclick="event.stopPropagation();selectAllProvModels('${safe}',true)">Chọn hết</button>
+        <button class="btn sm" onclick="event.stopPropagation();selectAllProvModels('${safe}',false)">Bỏ hết</button>
+      </div>`;
+  }catch(e){ box.innerHTML=`<div style="color:var(--danger);font-size:12.5px">Lỗi: ${esc(e.message)}</div>`; }
+}
+function selectAllProvModels(safe, val){
+  const box = $("reloadbox_"+safe);
+  if(!box) return;
+  box.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=val);
+}
+async function saveProvModels(name, safe){
+  const box = $("reloadbox_"+safe);
+  if(!box) return;
+  const checked = new Set(Array.from(box.querySelectorAll('input[type="checkbox"]:checked')).map(cb=>cb.dataset.id));
+  const allIds = Array.from(box.querySelectorAll('input[type="checkbox"]')).map(cb=>cb.dataset.id);
+  const toDelete = allIds.filter(id=>!checked.has(id));
+  // delete unselected
+  for(const id of toDelete){
+    try{ await api("/gateway/models/"+encodeURIComponent(id),{method:"DELETE"}); }catch(e){}
+  }
+  // enable selected models
+  for(const id of checked){
+    try{ await api("/gateway/models/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({enabled:true})}); }catch(e){}
+  }
+  // re-render
+  box.style.display="none"; box.innerHTML="";
+  await loadModels();
+  renderProvModels(name, safe);
+  // also refresh provider list for model count
+  loadProviders();
+  toast("Đã lưu "+checked.size+" model");
 }
 function toggleAddKey(name){
   const safe = name.replace(/[^a-zA-Z0-9]/g,"_");
@@ -1265,7 +1346,7 @@ async function submitAddKey(prov,safe){
   const priority = parseInt($("ak_"+safe+"_pri").value||"0",10)||0;
   try{
     await api("/gateway/keys",{method:"POST",body:JSON.stringify({provider:prov,label,key,priority})});
-    toast("Đã thêm key"); loadProviders();
+    toast("Đã thêm key"); loadProviders(); loadModels();
   }catch(e){ toast("Lỗi: "+e.message); }
 }
 async function delProvider(name){
@@ -1329,7 +1410,7 @@ function renderModels(){
     </div>`).join("");
 }
 async function toggleModel(id,enabled){
-  try{ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); }
+  try{ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); loadProviders(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 async function testModel(id){
@@ -1338,7 +1419,7 @@ async function testModel(id){
 }
 async function delModel(id){
   if(!confirm("Xóa model '"+id+"'?")) return;
-  try{ await api("/gateway/models/"+encodeURIComponent(id),{method:"DELETE"}); toast("Đã xóa model"); loadModels(); }
+  try{ await api("/gateway/models/"+encodeURIComponent(id),{method:"DELETE"}); toast("Đã xóa model"); loadModels(); loadProviders(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 
