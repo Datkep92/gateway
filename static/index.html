@@ -160,42 +160,49 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
   display:grid;gap:10px;transition:border-color .16s,transform .12s;
 }
 .item:hover{border-color:var(--border2)}
-.prov-head{width:100%;display:flex;align-items:center;gap:10px;padding:0;background:none;border:none;text-align:left;cursor:pointer}
+.prov-head{width:100%;display:flex;align-items:center;gap:8px;padding:0;background:none;border:none;text-align:left;cursor:pointer;color:inherit}
 .prov-head:focus{outline:none}
-.prov-meta{flex:1;min-width:0;display:grid;gap:2px}
-.prov-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:grid;gap:8px}
-.prov-line1{position:relative;padding-right:62px;min-width:0}
-.prov-name{font-weight:650;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.prov-meta{flex:1;min-width:0;display:grid;gap:3px}
+.prov-detail{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:grid;gap:8px}
+.prov-line1{display:flex;align-items:center;gap:6px;min-width:0}
+.prov-name{flex:1;min-width:0;font-weight:650;font-size:14px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prov-web{font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:100%}
-.prov-line2{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.prov-line2{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);min-width:0}
+.prov-stats{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prov-sep{opacity:.5}
+.prov-st{font-weight:700}
+.prov-st.ok{color:#4ade80}
+.prov-st.off{color:#ff8b8b}
+html[data-theme="light"] .prov-st.ok{color:#15803d}
+html[data-theme="light"] .prov-st.off{color:#b91c1c}
 .prov-url-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
 .prov-url-row .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
-.prov-title-btns{position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;gap:3px;align-items:center}
-.prov-title-btns .btn{min-height:22px;padding:1px 4px;font-size:11px;border-radius:6px;line-height:1}
-.prov-modellist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
-.model-tile{border:1px solid var(--border);border-radius:10px;padding:8px;background:var(--card);min-width:0}
+.prov-title-btns{display:flex;gap:5px;align-items:center;flex-shrink:0}
+.prov-title-btns .btn{min-width:36px;min-height:32px;padding:0 6px;font-size:14px;border-radius:9px;line-height:1}
+.prov-modellist{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:5px;margin-top:6px}
+.model-tile{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;padding:7px 9px;background:var(--card);min-width:0}
+.model-tile .mt-main{flex:1;min-width:0;display:grid;gap:1px}
 .model-tile .mt-top{display:flex;align-items:center;gap:6px;min-width:0}
-.model-tile .mt-name{flex:1;min-width:0;font-weight:650;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.model-tile .mt-id{font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
-.model-tile .mt-prov{font-size:10px;color:var(--muted);margin-top:2px}
-.model-tile .mt-msg{font-size:10.5px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
-.prov-actions .btn{width:100%}
+.model-tile .mt-name{flex:1;min-width:0;font-weight:650;font-size:13px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-tile .mt-id{font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-tile .mt-prov{font-size:10px;color:var(--muted)}
+.model-tile .mt-msg{font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+.prov-actions .btn{width:100%;min-height:40px;padding:0 4px;font-size:15px}
 .prov-url-btns{display:flex;gap:4px;flex-shrink:0}
 .prov-model-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)}
 .prov-model-row:last-child{border-bottom:none}
 .prov-model-name{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prov-model-chk{width:auto;margin:0;flex-shrink:0}
 .prov-reload-box{margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg2)}
-.prov-keys{display:grid;gap:6px;margin-top:6px}
-.prov-key-row{border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:var(--bg2)}
+.prov-keys{display:grid;gap:5px;margin-top:6px}
+.prov-key-row{border:1px solid var(--border);border-radius:9px;padding:5px 7px;background:var(--bg2)}
 .prov-key-main{display:flex;align-items:center;gap:6px;min-width:0}
-.prov-key-name{flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.prov-key-btns{display:flex;gap:4px;flex-shrink:0}
-.prov-key-btns .btn.icon{padding:2px 6px;font-size:13px;line-height:1}
+.prov-key-name{flex:1;min-width:0;font-size:13px;font-weight:600;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prov-key-btns{display:flex;gap:5px;flex-shrink:0}
+.prov-key-btns .btn.icon{min-width:34px;min-height:32px;padding:0 6px;font-size:14px;line-height:1;border-radius:9px}
 .prov-key-edit{display:grid;gap:4px}
-.chev{font-size:16px;color:var(--muted);transition:transform .18s;line-height:1}
-.prov-item{padding:11px 13px}
+.chev{font-size:15px;color:var(--muted);transition:transform .18s;line-height:1;flex-shrink:0}
+.prov-item{padding:10px 12px}
 .item .top{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
 .item .name{font-weight:650;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
 .item .sub{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
@@ -1193,13 +1200,13 @@ function renderProviders(){
       const keysHtml = provKeys.length ? provKeys.map(k=>`
         <div class="prov-key-row" id="keyrow_${k.id}">
           <div class="prov-key-main">
+            <span class="badge ${k.health==='ok'?'ok':(k.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${k.health==='ok'?'✓':(k.health==='fail'?'✗':'?')}</span>
             <span class="prov-key-name" title="${esc(k.label||"không tên")}">${esc(k.label||"không tên")}</span>
             <span class="prov-key-btns">
               <button class="btn sm icon" onclick="event.stopPropagation();testKey('${k.id}')" title="Test key">🧪</button>
               <button class="btn sm icon" onclick="event.stopPropagation();toggleKey('${k.id}',${!k.enabled})" title="${k.enabled?'Tắt':'Bật'}">${k.enabled?'🟢':'⚪'}</button>
               <button class="btn sm icon" onclick="event.stopPropagation();toggleEditKey('${k.id}')" title="Sửa key">✏️</button>
             </span>
-            <span class="badge ${k.health==='ok'?'ok':(k.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${k.health==='ok'?'✓':(k.health==='fail'?'✗':'?')}</span>
           </div>
           <div id="keyedit_${k.id}" class="prov-key-edit" style="display:none">
             <div class="mono" style="margin-top:4px;font-size:11px">${esc(k.key_prefix)}…</div>
@@ -1223,20 +1230,16 @@ function renderProviders(){
           <div class="prov-meta">
             <div class="prov-line1">
               <span class="prov-name">${esc(displayName)}</span>
+              <span class="chev" id="chev_${safe}">⏽</span>
+            </div>
+            <div class="prov-line2">
+              <span class="prov-stats">${esc(p.key_count)} key <span class="prov-sep">·</span> <span id="provmodelcount_${safe}">${esc(p.model_count)} model</span> <span class="prov-sep">·</span> <span class="prov-st ${p.connected?'ok':'off'}">${p.connected?"● đã nối":"● chưa key"}</span></span>
               <span class="prov-title-btns">
                 <button class="btn sm icon" onclick="event.stopPropagation();copyValue('${jsq(p.base_url||"")}','URL')" title="Copy URL">📋</button>
                 <button class="btn sm icon" onclick="event.stopPropagation();window.open('${jsq(p.base_url||"")}','_blank')" title="Mở URL">↗</button>
               </span>
             </div>
-            <div class="prov-line2">
-              <span>${esc(p.key_count)} key</span>
-              <span class="prov-sep">·</span>
-              <span id="provmodelcount_${safe}">${esc(p.model_count)} model</span>
-              <span class="prov-sep">·</span>
-              <span class="badge ${p.connected?'ok':'off'}" style="font-size:10.5px;padding:2px 8px">${p.connected?"đã nối":"chưa key"}</span>
-            </div>
           </div>
-          <span class="chev" id="chev_${safe}">⏽</span>
         </div>
         <div id="prov_detail_${safe}" class="prov-detail" style="display:none">
           <div class="prov-keys">${keysHtml}</div>
@@ -1343,18 +1346,20 @@ function renderProvModelList(name, safe){
   if(!models.length){ el.innerHTML = emptyBox("🧠", (CACHE.models||[]).filter(m=>m.provider===name).length?"Không có model nào khớp.":"Chưa có model nào."); return; }
   el.innerHTML = models.map(m=>`
     <div class="model-tile">
-      <div class="mt-top">
-        <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
-        <div class="mt-name">${esc(m.display_name||m.id)}</div>
-        <span class="prov-key-btns">
-          <button class="btn sm icon" onclick="event.stopPropagation();testModel('${jsq(m.id)}')" title="Test model">🧪</button>
-          <button class="btn sm icon" onclick="event.stopPropagation();toggleModel('${jsq(m.id)}',${!m.enabled})" title="${m.enabled?'Tắt':'Bật'}">${m.enabled?'🟢':'⚪'}</button>
-          <button class="btn sm icon danger" onclick="event.stopPropagation();delModel('${jsq(m.id)}')" title="Xóa model">🗑</button>
-        </span>
+      <div class="mt-main">
+        <div class="mt-top">
+          <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
+          <div class="mt-name">${esc(m.display_name||m.id)}</div>
+        </div>
+        ${(m.display_name && m.display_name!==m.id)?`<div class="mt-id">${esc(m.id)}</div>`:""}
+        ${q?`<div class="mt-prov">${esc(m.provider)}</div>`:""}
+        ${m.last_test_message?`<div class="mt-msg">${esc(m.last_test_message)}</div>`:""}
       </div>
-      <div class="mt-id">${esc(m.id)}</div>
-      ${q?`<div class="mt-prov">${esc(m.provider)}</div>`:""}
-      ${m.last_test_message?`<div class="mt-msg">${esc(m.last_test_message)}</div>`:""}
+      <span class="prov-key-btns">
+        <button class="btn sm icon" onclick="event.stopPropagation();testModel('${jsq(m.id)}')" title="Test model">🧪</button>
+        <button class="btn sm icon" onclick="event.stopPropagation();toggleModel('${jsq(m.id)}',${!m.enabled})" title="${m.enabled?'Tắt':'Bật'}">${m.enabled?'🟢':'⚪'}</button>
+        <button class="btn sm icon danger" onclick="event.stopPropagation();delModel('${jsq(m.id)}')" title="Xóa model">🗑</button>
+      </span>
     </div>`).join("");
 }
 async function reloadProvModels(name, safe){
