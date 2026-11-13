@@ -171,6 +171,7 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
 .prov-sep{opacity:.5}
 .prov-url-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
 .prov-url-row .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.prov-actions .btn{width:100%}
 .prov-url-btns{display:flex;gap:4px;flex-shrink:0}
 .prov-model-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)}
 .prov-model-row:last-child{border-bottom:none}
@@ -186,8 +187,8 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
 .prov-key-edit{display:grid;gap:4px}
 .chev{font-size:16px;color:var(--muted);transition:transform .18s;line-height:1}
 .prov-item{padding:11px 13px}
-.item .top{display:flex;align-items:center;gap:10px;min-width:0}
-.item .name{font-weight:650;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .top{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
+.item .name{font-weight:650;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
 .item .sub{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px}
 .kv .k{color:var(--muted);font-weight:600}
@@ -207,7 +208,7 @@ pre.box{background:var(--bg2);border:1px solid var(--border);border-radius:var(-
 
 /* bottom nav (mobile) */
 .bottomnav{
-  position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(6,1fr);
+  position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(5,1fr);
   background:var(--card);background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(18px);
   -webkit-backdrop-filter:blur(18px);border-top:1px solid var(--border);
   padding:6px 4px calc(6px + env(safe-area-inset-bottom));
@@ -508,7 +509,7 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
         <div class="card">
           <h3>🏢 Danh sách <span class="tag" id="providersCount"></span></h3>
           <div class="rowflex" style="margin-bottom:8px">
-            <input id="providerSearch" placeholder="Tìm nhà cung cấp (tên, url)…" oninput="renderProviders()" style="flex:1">
+            <input id="providerSearch" placeholder="Tìm nhà cung cấp hoặc model (tên, url)…" oninput="renderProviders()" style="flex:1">
             <button class="btn sm" onclick="renderProviders()">🔍</button>
           </div>
           <div id="providersList" class="list"></div>
@@ -1141,10 +1142,27 @@ async function loadProviders(){
 function renderProviders(){
   const el=$("providersList");
   const q = ($("providerSearch")||{value:""}).value.trim().toLowerCase();
-  let ps = (CACHE.providers||[]).filter(p=>{
+  const provMap = {}; (CACHE.providers||[]).forEach(p=>{ provMap[p.name]=p.base_url||""; });
+  const normUrl = (u)=>String(u||"").toLowerCase().replace(/^https?:\/\//,"").replace(/\/+$/,"");
+  const modelsByProv = {};
+  (CACHE.models||[]).forEach(m=>{ (modelsByProv[m.provider]||(modelsByProv[m.provider]=[])).push(m); });
+  const providerMatches = (p)=>{
     if(!q) return true;
     const hay = [p.name,p.label,p.base_url,p.key_url].join(" ").toLowerCase();
-    return hay.includes(q);
+    const hayUrl = normUrl(p.base_url||"")+" "+normUrl(p.key_url||"");
+    return hay.includes(q) || hayUrl.includes(normUrl(q));
+  };
+  const modelMatches = (m)=>{
+    if(!q) return true;
+    const url = provMap[m.provider]||"";
+    const hay = [m.id,m.display_name,m.provider,url].join(" ").toLowerCase();
+    const hayUrl = normUrl(url)+" "+normUrl(m.provider);
+    return hay.includes(q) || hayUrl.includes(normUrl(q));
+  };
+  let ps = (CACHE.providers||[]).filter(p=>{
+    if(!q) return true;
+    if(providerMatches(p)) return true;
+    return (modelsByProv[p.name]||[]).some(modelMatches);
   });
   const ks = CACHE.keys||[];
   if(!ps.length){
@@ -1154,6 +1172,12 @@ function renderProviders(){
   }
   const byProv={};
   ks.forEach(k=>{ (byProv[k.provider]||(byProv[k.provider]=[])).push(k); });
+  // determine auto-open providers (có model khớp khi đang lọc)
+  const autoOpenSet = new Set();
+  if(q) ps.forEach(p=>{
+    const ms = (modelsByProv[p.name]||[]).filter(modelMatches);
+    if(ms.length) autoOpenSet.add(p.name);
+  });
   el.innerHTML = ps.map(p=>{
       const provKeys = byProv[p.name]||[];
       const safe = p.name.replace(/[^a-zA-Z0-9]/g,"_");
@@ -1208,7 +1232,6 @@ function renderProviders(){
             <span class="mono" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${esc(p.base_url||"–")}</span>
             <span class="prov-url-btns">
               <button class="btn sm" onclick="event.stopPropagation();copyValue('${jsq(p.base_url||"")}','URL')" title="Copy URL">📋</button>
-              <button class="btn sm" onclick="event.stopPropagation();window.open('${jsq(p.base_url||"")}','_blank')" title="Mở URL">↗</button>
               ${p.key_url?`<button class="btn sm" onclick="event.stopPropagation();copyValue('${jsq(p.key_url)}','Web')" title="Copy web">📋</button>
               <button class="btn sm" onclick="event.stopPropagation();window.open('${jsq(p.key_url)}','_blank')" title="Mở web">↗</button>`:""}
             </span>
@@ -1216,21 +1239,18 @@ function renderProviders(){
           <div class="prov-keys">${keysHtml}</div>
           <div class="prov-models-section" style="margin-top:8px">
             <div class="rowflex" style="align-items:center;gap:6px;margin-bottom:4px">
-              <button class="btn sm" onclick="event.stopPropagation();toggleProvModels('${safe}')" id="provmodelstoggle_${safe}" title="Đóng/mở danh sách model">▸ Models (${(CACHE.models||[]).filter(m=>m.provider===p.name).length})</button>
+              <button class="btn sm" onclick="event.stopPropagation();toggleProvModels('${safe}')" id="provmodelstoggle_${safe}" title="Đóng/mở danh sách model">${autoOpenSet.has(p.name)?"▾":"▸"} Models (${(CACHE.models||[]).filter(m=>m.provider===p.name).length})</button>
             </div>
-            <div id="provmodels_${safe}" style="display:none">
-              <div class="rowflex" style="margin-bottom:6px">
-                <input id="provmodelsearch_${safe}" placeholder="Tìm model (tên, id)…" oninput="renderProvModelList('${jsq(p.name)}','${safe}')" style="flex:1">
-              </div>
+            <div id="provmodels_${safe}" style="display:${autoOpenSet.has(p.name)?"block":"none"}">
               <div id="provmodellist_${safe}" class="list"></div>
             </div>
           </div>
-          <div class="rowflex" style="margin-top:4px;gap:4px;flex-wrap:wrap">
+          <div class="prov-actions" style="margin-top:4px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
             <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${jsq(p.name)}')" title="Thêm key">➕ Key</button>
             <button class="btn sm" onclick="event.stopPropagation();reloadProvModels('${jsq(p.name)}','${safe}')" title="Tải DS model">🔄 Model</button>
             <button class="btn sm" onclick="event.stopPropagation();testProvModels('${jsq(p.name)}')" title="Test model">🧪 Test</button>
             <button class="btn sm" onclick="event.stopPropagation();toggleEditProv('${jsq(p.name)}')" title="Sửa ncc">✏️ Sửa</button>
-            <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${jsq(p.name)}')" title="Xóa ncc">🗑</button>
+            <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${jsq(p.name)}')" title="Xóa ncc">🗑 Xóa</button>
           </div>
           <div id="addkey_${safe}" style="display:none;margin-top:8px">
             <div class="grid2">
@@ -1251,6 +1271,14 @@ function renderProviders(){
         </div>
       </div>`;
     }).join("");
+  // populate auto-opened model lists (kết hợp bộ lọc)
+  if(autoOpenSet && autoOpenSet.size){
+    autoOpenSet.forEach(name=>{
+      const safe = name.replace(/[^a-zA-Z0-9]/g,"_");
+      const el = $("provmodels_"+safe);
+      if(el){ el.style.display="block"; renderProvModelList(name, safe); }
+    });
+  }
 }
 function toggleProvDetail(name){
   const safe = name.replace(/[^a-zA-Z0-9]/g,"_");
@@ -1297,13 +1325,18 @@ function toggleProvModels(safe){
 function renderProvModelList(name, safe){
   const el = $("provmodellist_"+safe);
   if(!el) return;
-  const q = ($("provmodelsearch_"+safe)||{value:""}).value.trim().toLowerCase();
+  const q = ($("providerSearch")||{value:""}).value.trim().toLowerCase();
   const provMap = {}; (CACHE.providers||[]).forEach(p=>{ provMap[p.name]=p.base_url||""; });
+  const normUrl = (u)=>String(u||"").toLowerCase().replace(/^https?:\/\//,"").replace(/\/+$/,"");
+  const modelMatches = (m, query)=>{
+    if(!query) return true;
+    const url = provMap[m.provider]||"";
+    const hay = [m.id,m.display_name,m.provider,url].join(" ").toLowerCase();
+    const hayUrl = normUrl(url)+" "+normUrl(m.provider);
+    return hay.includes(query) || hayUrl.includes(normUrl(query));
+  };
   let models = (CACHE.models||[]).filter(m=>m.provider===name);
-  if(q) models = models.filter(m=>{
-    const hay = [m.id,m.display_name,m.provider,provMap[m.provider]||""].join(" ").toLowerCase();
-    return hay.includes(q);
-  });
+  if(q) models = models.filter(m=>modelMatches(m,q));
   if(!models.length){ el.innerHTML = emptyBox("🧠", (CACHE.models||[]).filter(m=>m.provider===name).length?"Không có model nào khớp.":"Chưa có model nào."); return; }
   el.innerHTML = models.map(m=>`
     <div class="item" style="padding:8px 10px">
@@ -1422,6 +1455,8 @@ async function toggleModel(id,enabled){
 }
 async function testModel(id){
   try{ const r=await api("/gateway/models/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Model OK":"Model lỗi: "+(r.message||"")); await loadModels();
+    const m=(CACHE.models||[]).find(x=>x.id===id);
+    if(m){ const safe=m.provider.replace(/[^a-zA-Z0-9]/g,"_"); const el=$("provmodels_"+safe); if(el){ el.style.display="block"; renderProvModelList(m.provider,safe); const btn=$("provmodelstoggle_"+safe); if(btn){ const cnt=(CACHE.models||[]).filter(x=>x.provider===m.provider).length; btn.textContent="▾ Models ("+cnt+")"; } } }
     refreshProvModelLists();
   }
   catch(e){ toast("Lỗi: "+e.message); }
@@ -1438,7 +1473,10 @@ async function testProvModels(name){
     }
     toast(ok===ms.length ? `Model OK (${ok}/${ms.length})` : `Model: ${ok}/${ms.length} OK${last? " - "+last:""}`);
     await loadModels();
-    loadProviders();
+    const safe=name.replace(/[^a-zA-Z0-9]/g,"_");
+    const el=$("provmodels_"+safe);
+    if(el){ el.style.display="block"; renderProvModelList(name,safe); const btn=$("provmodelstoggle_"+safe); if(btn){ const cnt=(CACHE.models||[]).filter(x=>x.provider===name).length; btn.textContent="▾ Models ("+cnt+")"; } }
+    refreshProvModelLists();
   }catch(e){ toast("Lỗi: "+e.message); }
 }
 async function delModel(id){
