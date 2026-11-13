@@ -464,7 +464,6 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
     <button class="navbtn active" data-tab="dashboard" onclick="show('dashboard')"><span class="ico">📊</span> Tổng quan</button>
     <button class="navbtn" onclick="openSetup()"><span class="ico">⚡</span> Thiết lập một bước</button>
     <button class="navbtn" data-tab="keys" onclick="show('keys')"><span class="ico">🔑</span> API keys</button>
-    <button class="navbtn" data-tab="models" onclick="show('models')"><span class="ico">🧠</span> Models</button>
     <button class="navbtn" data-tab="logs" onclick="show('logs')"><span class="ico">📄</span> Logs</button>
     <button class="navbtn" data-tab="settings" onclick="show('settings')"><span class="ico">⚙️</span> Cài đặt</button>
     <button class="navbtn" data-tab="config" onclick="show('config')"><span class="ico">🔌</span> Kết nối</button>
@@ -513,24 +512,6 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
             <button class="btn sm" onclick="renderProviders()">🔍</button>
           </div>
           <div id="providersList" class="list"></div>
-        </div>
-      </section>
-
-      <!-- models -->
-      <section id="models" class="section">
-        <div class="page-head"><h2>Models</h2><p>Chỉ model đang bật mới xuất hiện ở <span class="mono">/v1/models</span>.</p></div>
-        <div class="card">
-          <h3>🧠 Danh sách model <span class="tag" id="modelsCount"></span></h3>
-          <div class="rowflex" style="margin-bottom:8px">
-            <input id="modelSearch" placeholder="Tìm model (tên, id, nhà cc, url)…" oninput="renderModels()" style="flex:1">
-            <select id="modelSort" onchange="renderModels()">
-              <option value="id">Sắp xếp: tên model</option>
-              <option value="provider">Sắp xếp: nhà cung cấp</option>
-              <option value="url">Sắp xếp: URL</option>
-              <option value="health">Sắp xếp: trạng thái</option>
-            </select>
-          </div>
-          <div id="modelsList" class="list"></div>
         </div>
       </section>
 
@@ -609,7 +590,6 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
   <nav class="bottomnav">
     <button class="active" data-tab="dashboard" onclick="show('dashboard')"><span class="ico">📊</span>Tổng quan</button>
     <button data-tab="keys" onclick="show('keys')"><span class="ico">🔑</span>Keys</button>
-    <button data-tab="models" onclick="show('models')"><span class="ico">🧠</span>Models</button>
     <button data-tab="logs" onclick="show('logs')"><span class="ico">📄</span>Logs</button>
     <button data-tab="settings" onclick="show('settings')"><span class="ico">⚙️</span>Cài đặt</button>
     <button data-tab="config" onclick="show('config')"><span class="ico">🔌</span>Kết nối</button>
@@ -626,7 +606,7 @@ let CLIENT_KEY = "";
 let LAST_LOGS = [];
 let CACHE = {keys:[],models:[],clientKeys:[]};
 
-const TITLES = {dashboard:"Tổng quan",keys:"API keys",models:"Models",logs:"Logs",settings:"Cài đặt",config:"Kết nối"};
+const TITLES = {dashboard:"Tổng quan",keys:"API keys",logs:"Logs",settings:"Cài đặt",config:"Kết nối"};
 
 /* ---------- utils ---------- */
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -1084,7 +1064,6 @@ function show(id){
   window.scrollTo({top:0,behavior:"smooth"});
   if(id==="dashboard") loadDashboard();
   if(id==="keys") loadProviders();
-  if(id==="models") loadModels();
   if(id==="logs") loadLogs();
   if(id==="settings") loadSettings();
   if(id==="config") loadConfig();
@@ -1151,9 +1130,10 @@ async function saveEditKey(id){
 async function loadProviders(){
   const el=$("providersList"); skeletons(el,2);
   try{
-    const [pd,kd] = await Promise.all([api("/gateway/providers"), api("/gateway/keys")]);
+    const [pd,kd,md] = await Promise.all([api("/gateway/providers"), api("/gateway/keys"), api("/gateway/models").catch(()=>({models:[]}))]);
     CACHE.providers = pd.providers||[];
     CACHE.keys = kd.keys||[];
+    CACHE.models = md.models||CACHE.models||[];
     $("providersCount").textContent = CACHE.providers.length+" nhà cc";
     renderProviders();
   }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
@@ -1215,7 +1195,7 @@ function renderProviders(){
             <div class="prov-line2">
               <span>${esc(p.key_count)} key</span>
               <span class="prov-sep">·</span>
-              <span>${esc(p.model_count)} model</span>
+              <span id="provmodelcount_${safe}">${esc(p.model_count)} model</span>
               <span class="prov-sep">·</span>
               <span class="badge ${p.connected?'ok':'off'}" style="font-size:10.5px;padding:2px 8px">${p.connected?"đã nối":"chưa key"}</span>
             </div>
@@ -1234,6 +1214,17 @@ function renderProviders(){
             </span>
           </div>
           <div class="prov-keys">${keysHtml}</div>
+          <div class="prov-models-section" style="margin-top:8px">
+            <div class="rowflex" style="align-items:center;gap:6px;margin-bottom:4px">
+              <button class="btn sm" onclick="event.stopPropagation();toggleProvModels('${safe}')" id="provmodelstoggle_${safe}" title="Đóng/mở danh sách model">▸ Models (${(CACHE.models||[]).filter(m=>m.provider===p.name).length})</button>
+            </div>
+            <div id="provmodels_${safe}" style="display:none">
+              <div class="rowflex" style="margin-bottom:6px">
+                <input id="provmodelsearch_${safe}" placeholder="Tìm model (tên, id)…" oninput="renderProvModelList('${jsq(p.name)}','${safe}')" style="flex:1">
+              </div>
+              <div id="provmodellist_${safe}" class="list"></div>
+            </div>
+          </div>
           <div class="rowflex" style="margin-top:4px;gap:4px;flex-wrap:wrap">
             <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${jsq(p.name)}')" title="Thêm key">➕ Key</button>
             <button class="btn sm" onclick="event.stopPropagation();reloadProvModels('${jsq(p.name)}','${safe}')" title="Tải DS model">🔄 Model</button>
@@ -1269,6 +1260,65 @@ function toggleProvDetail(name){
   const open = el.style.display==="none" || !el.style.display;
   el.style.display = open ? "block" : "none";
   if(chev) chev.textContent = open ? "▾" : "▸";
+}
+function refreshProvModelLists(){
+  (CACHE.providers||[]).forEach(p=>{
+    const safe = p.name.replace(/[^a-zA-Z0-9]/g,"_");
+    const el = $("provmodels_"+safe);
+    if(el && el.style.display!=="none" && el.style.display!==""){
+      renderProvModelList(p.name, safe);
+    }
+    const btn = $("provmodelstoggle_"+safe);
+    if(btn){
+      const cnt = (CACHE.models||[]).filter(m=>m.provider===p.name).length;
+      const open = el && el.style.display!=="none" && el.style.display!=="";
+      btn.textContent = (open?"▾":"▸") + " Models ("+cnt+")";
+    }
+    // cập nhật số model đang bật trong header nhà cung cấp
+    const cntSpan = $("provmodelcount_"+safe);
+    if(cntSpan){
+      const activeCnt = (CACHE.models||[]).filter(m=>m.provider===p.name && m.enabled && m.available).length;
+      cntSpan.textContent = activeCnt + " model";
+    }
+  });
+}
+function toggleProvModels(safe){
+  const el = $("provmodels_"+safe);
+  const btn = $("provmodelstoggle_"+safe);
+  if(!el) return;
+  const open = el.style.display==="none" || !el.style.display;
+  el.style.display = open ? "block" : "none";
+  const prov = (CACHE.providers||[]).find(p=>p.name.replace(/[^a-zA-Z0-9]/g,"_")===safe);
+  const name = prov ? prov.name : safe;
+  const cnt = (CACHE.models||[]).filter(m=>m.provider===name).length;
+  if(btn) btn.textContent = (open?"▾":"▸") + " Models ("+cnt+")";
+  if(open) renderProvModelList(name, safe);
+}
+function renderProvModelList(name, safe){
+  const el = $("provmodellist_"+safe);
+  if(!el) return;
+  const q = ($("provmodelsearch_"+safe)||{value:""}).value.trim().toLowerCase();
+  const provMap = {}; (CACHE.providers||[]).forEach(p=>{ provMap[p.name]=p.base_url||""; });
+  let models = (CACHE.models||[]).filter(m=>m.provider===name);
+  if(q) models = models.filter(m=>{
+    const hay = [m.id,m.display_name,m.provider,provMap[m.provider]||""].join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+  if(!models.length){ el.innerHTML = emptyBox("🧠", (CACHE.models||[]).filter(m=>m.provider===name).length?"Không có model nào khớp.":"Chưa có model nào."); return; }
+  el.innerHTML = models.map(m=>`
+    <div class="item" style="padding:8px 10px">
+      <div class="top">
+        <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
+        <div class="name" style="font-size:13px">${esc(m.display_name||m.id)}</div>
+        <span class="prov-key-btns">
+          <button class="btn sm icon" onclick="event.stopPropagation();testModel('${jsq(m.id)}')" title="Test model">🧪</button>
+          <button class="btn sm icon" onclick="event.stopPropagation();toggleModel('${jsq(m.id)}',${!m.enabled})" title="${m.enabled?'Tắt':'Bật'}">${m.enabled?'🟢':'⚪'}</button>
+          <button class="btn sm icon danger" onclick="event.stopPropagation();delModel('${jsq(m.id)}')" title="Xóa model">🗑</button>
+        </span>
+      </div>
+      <div class="mono" style="font-size:10.5px">${esc(m.id)}</div>
+      ${m.last_test_message?`<div class="kv" style="font-size:10.5px"><span class="k">Kết quả</span><span class="v">${esc(m.last_test_message)}</span></div>`:""}
+    </div>`).join("");
 }
 async function reloadProvModels(name, safe){
   const box = $("reloadbox_"+safe);
@@ -1359,69 +1409,20 @@ async function delProvider(name){
 
 /* ---------- models ---------- */
 async function loadModels(){
-  const el=$("modelsList"); skeletons(el,3);
   try{
-    const [md,pd] = await Promise.all([api("/gateway/models"), api("/gateway/providers").catch(()=>({providers:[]}))]);
+    const md = await api("/gateway/models");
     CACHE.models = md.models||[];
-    CACHE.providers = pd.providers||CACHE.providers||[];
-    $("modelsCount").textContent = CACHE.models.length+" model";
-    renderModels();
-  }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
-}
-function renderModels(){
-  const el=$("modelsList");
-  const rows = CACHE.models||[];
-  const q = ($("modelSearch")||{value:""}).value.trim().toLowerCase();
-  const sort = ($("modelSort")||{value:"id"}).value;
-  const provMap = {}; (CACHE.providers||[]).forEach(p=>{ provMap[p.name]=p.base_url||""; });
-  const normUrl = (u)=>String(u||"").toLowerCase().replace(/^https?:\/\//,"").replace(/\/+$/,"");
-  const nq = normUrl(q);
-  // dedup: nếu cùng url và cùng id thì chỉ giữ một
-  const seen=new Set();
-  let list = rows.filter(m=>{
-    if(q){
-      const url = provMap[m.provider]||"";
-      const hay = [m.id,m.display_name,m.provider,url].join(" ").toLowerCase();
-      const hayUrl = normUrl(url)+" "+normUrl(m.provider);
-      if(!hay.includes(q) && !hayUrl.includes(nq)) return false;
-    }
-    const key = (m.id||"")+"|"+(provMap[m.provider]||"");
-    if(seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  list.sort((a,b)=>{
-    if(sort==="provider") return String(a.provider||"").localeCompare(String(b.provider||""));
-    if(sort==="url") return String(provMap[a.provider]||"").localeCompare(String(provMap[b.provider]||""));
-    if(sort==="health") return String(a.health||"").localeCompare(String(b.health||""));
-    return String(a.display_name||a.id||"").localeCompare(String(b.display_name||b.id||""));
-  });
-  if(!list.length){ el.innerHTML = emptyBox("🧠", rows.length?"Không có model nào khớp.":"Chưa có model nào."); return; }
-  const shown = list.slice(0, 60);
-  el.innerHTML = shown.map(m=>`
-    <div class="item">
-      <div class="top">
-        <span class="badge neutral">${esc(m.provider)}</span>
-        <div class="name">${esc(m.display_name||m.id)}</div>
-        <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
-        <span class="prov-key-btns">
-          <button class="btn sm icon" onclick="testModel('${m.id}')" title="Test model">🧪</button>
-          <button class="btn sm icon" onclick="toggleModel('${m.id}',${!m.enabled})" title="${m.enabled?'Tắt':'Bật'}">${m.enabled?'🟢':'⚪'}</button>
-          <button class="btn sm icon danger" onclick="delModel('${m.id}')" title="Xóa model">🗑</button>
-        </span>
-      </div>
-      <div class="mono" style="font-size:11px">${esc(m.id)}</div>
-      <div class="kv" style="font-size:11.5px"><span class="k">URL</span><span class="v">${esc(provMap[m.provider]||"–")}</span></div>
-      ${m.last_test_message?`<div class="kv" style="font-size:11.5px"><span class="k">Kết quả test</span><span class="v">${esc(m.last_test_message)}</span></div>`:""}
-    </div>`).join("") + (list.length>60 ? `<div class="empty" style="padding:10px">Còn ${list.length-60} model — dùng ô tìm kiếm để lọc.</div>` : "");
+  }catch(e){ /* ignore */ }
 }
 async function toggleModel(id,enabled){
-  try{ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); loadModels(); loadProviders(); }
+  try{ await api("/gateway/models/"+id,{method:"PATCH",body:JSON.stringify({enabled})}); await loadModels();
+    refreshProvModelLists();
+  }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 async function testModel(id){
   try{ const r=await api("/gateway/models/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Model OK":"Model lỗi: "+(r.message||"")); await loadModels();
-    loadProviders();
+    refreshProvModelLists();
   }
   catch(e){ toast("Lỗi: "+e.message); }
 }
@@ -1442,7 +1443,7 @@ async function testProvModels(name){
 }
 async function delModel(id){
   if(!confirm("Xóa model '"+id+"'?")) return;
-  try{ await api("/gateway/models/"+encodeURIComponent(id),{method:"DELETE"}); toast("Đã xóa model"); loadModels(); loadProviders(); }
+  try{ await api("/gateway/models/"+encodeURIComponent(id),{method:"DELETE"}); toast("Đã xóa model"); await loadModels(); refreshProvModelLists(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 
