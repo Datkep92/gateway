@@ -1238,6 +1238,7 @@ function renderProviders(){
           <div class="rowflex" style="margin-top:4px;gap:4px;flex-wrap:wrap">
             <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${jsq(p.name)}')" title="Thêm key">➕ Key</button>
             <button class="btn sm" onclick="event.stopPropagation();reloadProvModels('${jsq(p.name)}','${safe}')" title="Tải DS model">🔄 Model</button>
+            <button class="btn sm" onclick="event.stopPropagation();testProvModels('${jsq(p.name)}')" title="Test model">🧪 Model</button>
             <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${jsq(p.name)}')" title="Xóa ncc">🗑</button>
           </div>
           <div id="addkey_${safe}" style="display:none;margin-top:8px">
@@ -1276,6 +1277,7 @@ function renderProvModels(name, safe){
       <div class="prov-model-row">
         <span class="prov-model-name" title="${esc(m.id)}">${esc(m.display_name||m.id)}</span>
         <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
+        <button class="btn sm icon" onclick="event.stopPropagation();testModel('${m.id}')" title="Test model">🧪</button>
         <span class="switch ${m.enabled?'on':''}" onclick="event.stopPropagation();toggleModel('${m.id}',${!m.enabled})" style="transform:scale(.8)"></span>
         <button class="btn sm danger" onclick="event.stopPropagation();delProvModel('${m.id}','${safe}')" title="Xóa model" style="padding:2px 6px">🗑</button>
       </div>`).join("");
@@ -1381,12 +1383,16 @@ function renderModels(){
   const q = ($("modelSearch")||{value:""}).value.trim().toLowerCase();
   const sort = ($("modelSort")||{value:"id"}).value;
   const provMap = {}; (CACHE.providers||[]).forEach(p=>{ provMap[p.name]=p.base_url||""; });
+  const normUrl = (u)=>String(u||"").toLowerCase().replace(/^https?:\/\//,"").replace(/\/+$/,"");
+  const nq = normUrl(q);
   // dedup: nếu cùng url và cùng id thì chỉ giữ một
   const seen=new Set();
   let list = rows.filter(m=>{
     if(q){
-      const hay = [m.id,m.display_name,m.provider,provMap[m.provider]||""].join(" ").toLowerCase();
-      if(!hay.includes(q)) return false;
+      const url = provMap[m.provider]||"";
+      const hay = [m.id,m.display_name,m.provider,url].join(" ").toLowerCase();
+      const hayUrl = normUrl(url)+" "+normUrl(m.provider);
+      if(!hay.includes(q) && !hayUrl.includes(nq)) return false;
     }
     const key = (m.id||"")+"|"+(provMap[m.provider]||"");
     if(seen.has(key)) return false;
@@ -1423,8 +1429,30 @@ async function toggleModel(id,enabled){
   catch(e){ toast("Lỗi: "+e.message); }
 }
 async function testModel(id){
-  try{ const r=await api("/gateway/models/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Model OK":"Model lỗi: "+(r.message||"")); loadModels(); }
+  try{ const r=await api("/gateway/models/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Model OK":"Model lỗi: "+(r.message||"")); await loadModels();
+    const m=(CACHE.models||[]).find(x=>x.id===id);
+    if(m){ const safe=m.provider.replace(/[^a-zA-Z0-9]/g,"_"); const el=$("prov_models_"+safe); if(el && el.innerHTML) renderProvModels(m.provider,safe); }
+    loadProviders();
+  }
   catch(e){ toast("Lỗi: "+e.message); }
+}
+async function testProvModels(name){
+  try{
+    if(!(CACHE.models||[]).length) await loadModels();
+    const ms=(CACHE.models||[]).filter(m=>m.provider===name && m.enabled);
+    if(!ms.length){ toast("Chưa có model bật để test"); return; }
+    let ok=0, last="";
+    for(const m of ms){
+      const r=await api("/gateway/models/test",{method:"POST",body:JSON.stringify({id:m.id})});
+      if(r.ok) ok++; last=r.message||last;
+    }
+    toast(ok===ms.length ? `Model OK (${ok}/${ms.length})` : `Model: ${ok}/${ms.length} OK${last? " - "+last:""}`);
+    await loadModels();
+    const safe=name.replace(/[^a-zA-Z0-9]/g,"_");
+    const el=$("prov_models_"+safe);
+    if(el && el.innerHTML) renderProvModels(name,safe);
+    loadProviders();
+  }catch(e){ toast("Lỗi: "+e.message); }
 }
 async function delModel(id){
   if(!confirm("Xóa model '"+id+"'?")) return;
