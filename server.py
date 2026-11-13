@@ -1,6 +1,6 @@
 import http.server, socketserver, threading, time, json, os, urllib.parse, ssl, socket, sys, gzip
 
-import db, keypool, proxy, rate_limit, providers, translate
+import db, keypool, proxy, rate_limit, providers, translate, autocheck
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -242,7 +242,12 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 log_request(cid, None, None, "/v1/models", 429, int((time.time()-self._t0)*1000), False, None)
                 return
         c = db.conn()
-        rows = c.execute("SELECT id,provider,display_name FROM gateway_models WHERE enabled=1 AND available=1 AND (health IS NULL OR health!='fail')").fetchall()
+        if db.get_setting("hide_unverified", "0") == "1":
+            rows = c.execute("""SELECT id,provider,display_name FROM gateway_models
+                                WHERE enabled=1 AND available=1 AND health='ok'""").fetchall()
+        else:
+            rows = c.execute("""SELECT id,provider,display_name FROM gateway_models
+                                WHERE enabled=1 AND available=1 AND (health IS NULL OR health!='fail')""").fetchall()
         c.close()
         data = {"object":"list","data":[]}
         for r in rows:
@@ -286,12 +291,22 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
         model = (j.get("model") or "").strip()
         if model:
             return model
-        c = db.conn()
-        rows = c.execute("""SELECT id FROM gateway_models WHERE enabled=1 AND available=1
-                            AND (health IS NULL OR health!='fail')
-                            ORDER BY is_free DESC, provider, id""").fetchall()
-        c.close()
-        ids = [r["id"] for r in rows]
+
+        def candidates(verified_only):
+            c = db.conn()
+            if verified_only:
+                rows = c.execute("""SELECT id FROM gateway_models WHERE enabled=1 AND available=1
+                                    AND health='ok'
+                                    ORDER BY is_free DESC, provider, id""").fetchall()
+            else:
+                rows = c.execute("""SELECT id FROM gateway_models WHERE enabled=1 AND available=1
+                                    AND (health IS NULL OR health!='fail')
+                                    ORDER BY is_free DESC, provider, id""").fetchall()
+            c.close()
+            return [r["id"] for r in rows]
+
+        # ưu tiên model đã kiểm thấy chạy được; máy mới chưa kiểm xong thì dùng tạm mọi model
+        ids = candidates(True) or candidates(False)
         keep = db.get_setting("default_model", "") or ""
         if keep in ids and chat_model(keep):
             return keep
@@ -397,6 +412,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             except BrokenPipeError:
                 pass
             log_request(cid, provider, model, "/v1/chat/completions", status if status else 502, latency, stream, key_id, "upstream_error", errb.decode(errors="ignore")[:500])
+            proxy.traffic_model_result(model, False, status, errb)
             return
         if stream:
             self.send_response(200)
@@ -409,6 +425,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             translator = translate.AnthropicToOpenAIStream(model) if upstream_anthropic else None
             self._pipe_stream(payload, translator)
             log_request(cid, provider, model, "/v1/chat/completions", 200, int((time.time()-t0)*1000), True, key_id)
+            proxy.traffic_model_result(model, True, status)
         else:
             data = payload.read() if hasattr(payload, "read") else payload
             try:
@@ -432,6 +449,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             except BrokenPipeError:
                 pass
             log_request(cid, provider, model, "/v1/chat/completions", status, int((time.time()-t0)*1000), False, key_id)
+            proxy.traffic_model_result(model, True, status)
 
     def _anthropic_messages(self):
         cid, err = self._auth_client()
@@ -492,6 +510,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             except BrokenPipeError:
                 pass
             log_request(cid, provider, model, "/v1/messages", status if status else 502, latency, stream, key_id, "upstream_error", errb.decode(errors="ignore")[:500])
+            proxy.traffic_model_result(model, False, status, errb)
             return
         if stream:
             self.send_response(200)
@@ -504,6 +523,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             translator = translate.OpenAIToAnthropicStream(model) if upstream_openai else None
             self._pipe_stream(payload, translator)
             log_request(cid, provider, model, "/v1/messages", 200, int((time.time()-t0)*1000), True, key_id)
+            proxy.traffic_model_result(model, True, status)
         else:
             data = payload.read() if hasattr(payload, "read") else payload
             try:
@@ -527,6 +547,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             except BrokenPipeError:
                 pass
             log_request(cid, provider, model, "/v1/messages", status, int((time.time()-t0)*1000), False, key_id)
+            proxy.traffic_model_result(model, True, status)
 
     # ---- thiết lập một bước: dán key là xong ----
     def _setup_allowed(self):
@@ -710,6 +731,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             db.upsert_models(chosen, model_ids)
         db.recompute_model_flags()
         db.apply_models_policy(chosen)
+        autocheck.wake()          # vừa thêm nhà cung cấp -> tự kiểm nền
 
         # 7. client key: luôn cấp một key mới để dán vào app ngay
         c = db.conn()
@@ -874,6 +896,9 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 "last_provider": db.get_setting("last_provider", ""),
             })
             return
+        if path == "/gateway/auto/status":
+            json_response(self, 200, autocheck.status())
+            return
         json_response(self, 404, {"error":{"message":"not found"}})
 
     def _gateway_post(self, path):
@@ -900,6 +925,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                     db.upsert_models(name, ids)
                     db.recompute_model_flags()
                     found = db.apply_models_policy(name)
+            autocheck.wake()          # có key/model mới -> tự kiểm ngay
             json_response(self, 200, {"id": kid, "models": found})
             return
         if path == "/gateway/client-keys":
@@ -923,6 +949,7 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
                 return
             db.upsert_models(name, ids)
             db.recompute_model_flags()
+            autocheck.wake()
             json_response(self, 200, {"ok": True, "found": len(ids), "models": ids, "enabled": db.apply_models_policy()})
             return
         if path == "/gateway/providers/base-url":
@@ -932,8 +959,17 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
         if path == "/gateway/models/policy":
             free_only = bool(j.get("free_only", True))
             db.set_setting("free_models_only", "1" if free_only else "0")
+            enabled = db.apply_models_policy()
+            autocheck.wake()
             json_response(self, 200, {"ok": True, "free_only": free_only,
-                                      "enabled": db.apply_models_policy()})
+                                      "enabled": enabled})
+            return
+        if path == "/gateway/auto/check":
+            # kiểm ngay một vòng, không cần chờ hẹn giờ
+            started = autocheck.run_async(force=bool(j.get("force", True)))
+            json_response(self, 200, {"ok": started, "started": started,
+                                      "busy": autocheck.STATE["busy"],
+                                      "status": autocheck.status()})
             return
         if path == "/gateway/models/test":
             mid = (j.get("id") or "").strip()
@@ -980,6 +1016,8 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             if "enabled" in j:
                 c.execute("UPDATE gateway_models SET enabled=? WHERE id=?", (1 if j["enabled"] else 0, kid))
                 c.commit()
+                if j["enabled"]:
+                    autocheck.wake()      # bật model mới -> kiểm nền
             c.close()
             json_response(self, 200, {"ok": True})
             return

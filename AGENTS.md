@@ -20,8 +20,10 @@ python3 Tests/e2e_test.py             # đầu-cuối qua HTTP, máy chủ giả
 python3 Tests/backup_restore_test.py  # xuất ở máy A, nhập ở máy B mới, khởi động lại
 python3 Tests/live_ui_test.py         # chạy chính mã giao diện trong node, đối diện gateway thật
 python3 Tests/session_test.py         # chạy thật gateway-session: cha chết → tự tắt, TERM → thoát 0
+python3 Tests/autocheck_test.py       # vòng tự kiểm: model lỗi/tạm thời, key 401 tự tắt rồi tự bật lại
 ```
-- Cả bốn bài thử tự dựng máy chủ giả và dùng thư mục/dữ liệu tạm, **không đụng `data/gateway.db` thật**.
+- Cả năm bài thử tự dựng máy chủ giả và dùng thư mục/dữ liệu tạm, **không đụng `data/gateway.db` thật**.
+- Thử thật mà không đụng dữ liệu thật: chép `*.py` + `static/` + một bản `data/gateway.db` sang `/tmp/gwlive`, đổi `port` sang cổng khác (15299), cấp một client key tạm (`db.new_client_key(...)`), rồi `screen -L -Logfile /tmp/gwlive/run.log -dmS gwlive python3 /tmp/gwlive/main.py` và đọc `/gateway/auto/status` **kèm key** đó; xong dọn session + thư mục tạm. Cổng thật của người dùng chỉ khởi động lại khi đã hỏi (nó đang chạy mã cũ, nên giao diện mới có thể báo lỗi cho tới lúc đó).
 - `session_test.py` thay `@PREFIX@` trong `packaging/gateway-session.in` bằng gốc bootstrap của máy rồi chạy script thật dưới một tiến trình cha giả; cổng giả lấy cổng trống, `GATEWAY_PROJECT_DIR` trỏ vào thư mục tạm (nên `run.log` cũng ở đó).
 - Node trên máy **không có WebAssembly** nên `fetch` thật không chạy: bài thử tự viết `fetch` bằng module `http`, và phải gửi kèm `Content-Length` (nếu không, máy chủ đọc thân rỗng).
 - Khung DOM giả trong bài thử **không tạo phần tử con từ `innerHTML`**: muốn kiểm phần tử sinh bằng `innerHTML` thì tự dựng lại từ chuỗi HTML.
@@ -34,12 +36,23 @@ python3 Tests/session_test.py         # chạy thật gateway-session: cha chế
 - File mang cổng khác cổng đang nghe thì trả `restart_needed:true` + `port`; nút trong giao diện gọi `POST /gateway/restart` (chỉ loopback) rồi tự `execv` lại tiến trình.
 - Giao diện: hộp `#backupSheet`, ô nhập `#backupFile` (ẩn) + `pickBackupFile()`, `exportBackup()`, `importBackupText()`. iPhone/iPad lưu file qua hộp chia sẻ (`navigator.share`), nơi khác thì tải xuống. Hộp chọn tệp của hệ điều hành **không kiểm được trong node** — phải thử tay trên máy.
 
+## Tự động kiểm key & model (người dùng chỉ cần thêm nhà cung cấp)
+- Mục tiêu: dán key rồi dùng base URL, **không phải bấm 🧪**. `autocheck.py` là vòng nền, `main.py` gọi `start()` khi cổng khởi động; tắt bằng setting `auto_check=0`.
+- Một vòng (`run_once(force)`) lấy tối đa `auto_check_batch` model từ `db.due_models()` (chưa kiểm, tới hạn thử lại, quá `model_stale_secs`) đem thử bằng `proxy.test_model()`, rồi thử lại tối đa 4 key từ `keypool.due_keys()` bằng `proxy.test_key_by_id()`. Xong thì nghỉ `auto_check_secs`; còn việc tới hạn thì nghỉ ngắn 3 s.
+- Kết luận: `ok` → kiểm lại sau `model_stale_secs`; lỗi thuộc model (404 `model not found`, không có quyền) → `fail`, thử lại sau `model_retry_secs`; lỗi tạm thời (429/5xx/mạng) và "chưa có key" → **giữ nguyên sức khỏe cũ**, hẹn 60 s; key 401/403 → tắt key kèm hẹn `key_retry_secs` và **không** kết luận model hỏng (một key sai không được làm mất model tốt).
+- Lỗi tạm thời **không được phạt key**: `proxy.test_model` gặp 429/5xx thì chỉ hẹn kiểm lại model, không `mark_failure`/`set_key_health`, vì 429 của một model đang bận không phải lỗi của key — phạt sẽ cho key của ncc nghỉ 30 s và chặn cả việc thật. Key chỉ bị kết luận qua `proxy.test_key_by_id` (401/403) và qua lượt gọi thật.
+- Key tự bật lại: `mark_failure(401/403)` đặt `auto_disabled=1` + `retry_at`; `test_key_by_id` thấy key sống lại thì `reenable_auto()` bật lại và `db.mark_provider_models_due()` hẹn kiểm lại model của ncc đó ngay. Key người dùng tự tắt (`set_enabled(0)`) thì không ai tự bật.
+- Không có vòng lặp vô hạn: mọi kết cục đều đặt `retry_at`, vòng chỉ chạy lại ngay khi thật sự còn việc tới hạn.
+- `hide_unverified=1`: `/v1/models` và model mặc định chỉ dùng model `health='ok'`; để `0` (mặc định) thì chỉ ẩn model đã kết luận `fail`.
+- Tuyến: `GET /gateway/auto/status` (trạng thái + số việc tồn), `POST /gateway/auto/check` `{force:true}` (kiểm ngay ở luồng riêng). Thêm nhà cung cấp/key/model hoặc đổi chính sách model đều gọi `autocheck.wake()` để kiểm ngay.
+- Giao diện: thẻ "🤖 Tự động kiểm key & model" ở mục Keys (`#autoBadge`/`#autoLine`/`#autoSub`/`#autoBtn`), `loadAutoStatus()` và `checkNow()`.
+
 ## Quy ước code
 - `server.py`: HTTP + các endpoint `/v1/*` và `/gateway/*`. `providers.py`: nhận diện nhà cung cấp, luật model miễn phí. `proxy.py`: gọi thượng nguồn. `db.py`: SQLite. `static/index.html`: toàn bộ giao diện.
 - Chuỗi động đặt vào thuộc tính `onclick="…'${jsq(x)}'…"` phải qua `jsq()` (an toàn cho cả chuỗi JS trong attribute); `esc()` chỉ dùng cho nội dung chữ/HTML.
 - Markup sinh bằng `innerHTML` **không được lồng `<button>` trong `<button>`** (hay `<a>` trong `<a>`): HTML tự đóng thẻ ngoài, phần còn lại thành anh em trong `.item` (grid) nên mỗi thứ một dòng và giãn hết chiều ngang — đúng gốc lỗi bố cục thẻ nhà cung cấp đã gặp (commit cdb581a). Thẻ vừa hiện chữ vừa chứa nút thì dùng `<div role="button" tabindex="0" onclick=...>`.
 - Bố cục ưu tiên di động: thẻ nhà cung cấp gập còn **2 dòng** (dòng 1 = tên + mũi tên, dòng 2 = số liệu + nút 📋/↗); tile model và hàng key cũng **một dòng**, nút nằm bên phải; nút phụ cao ≥32px, hàng 5 nút hành động cao 40px. Muốn thêm dòng thì mở rộng phần `.prov-detail` thay vì chèn vào thẻ gập.
-- Endpoint `/gateway/*` chỉ cho máy này (loopback) hoặc khi có client key hợp lệ. Riêng **xuất sao lưu luôn cần client key** (đã thử: loopback không key → 401), còn **nhập sao lưu và khởi động lại thì loopback không key vẫn được** (máy mới chưa có key vẫn khôi phục được).
+- Mọi tuyến `/gateway/*` đều đòi **client key hợp lệ**; riêng nhập sao lưu và khởi động lại thì loopback không key vẫn được (máy mới chưa có key vẫn khôi phục được). Loopback **không** thay cho key: `GET /gateway/auto/status`, `/gateway/status`, xuất sao lưu… gọi từ máy này mà thiếu key đều 401 (`invalid client key`) — `curl` thử phải kèm `-H "Authorization: Bearer <key>"`.
 - Gọi API mà không gửi tên model thì dùng model mặc định; model mặc định **phải là model trò chuyện**, bỏ qua model nhúng/embedding (`chat_model()` trong `server.py`).
 - `db.init_db()` phải chạy trước `db.set_setting` (không thì lỗi `no such table: settings`).
 - `data/` và `run.log` nằm ngoài git (`.gitignore`).

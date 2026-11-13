@@ -1,4 +1,4 @@
-import db, server, os, subprocess, sys
+import db, server, os, subprocess, sys, autocheck
 
 def ensure_client_key():
     c = db.conn()
@@ -46,11 +46,16 @@ def main():
         cert, key = ensure_tls_cert()
     print(f"Gateway starting on {host}:{port} (tls={tls_enabled})", flush=True)
     httpd = server.make_server(host, port, use_tls=tls_enabled, certfile=cert or None, keyfile=key or None)
+    # tự kiểm key/model trong nền: người dùng chỉ cần thêm nhà cung cấp rồi dùng
+    if autocheck.start():
+        print("Autocheck: bật (chu kỳ %ss)" % db.get_setting("auto_check_secs", "300"), flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("Shutting down...")
         httpd.shutdown()
+    finally:
+        autocheck.stop(2)
 
 if __name__ == "__main__":
     main()

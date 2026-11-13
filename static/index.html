@@ -523,6 +523,16 @@ details.adv summary{font-size:13px;font-weight:600;color:var(--muted);cursor:poi
       <section id="keys" class="section">
         <div class="page-head"><h2>Nhà cung cấp & API key</h2><p>Mỗi nhà cung cấp có thể có nhiều key; các key dùng chung model của nhà cung cấp đó.</p></div>
         <div class="card">
+          <h3>🤖 Tự động kiểm key & model <span class="badge neutral" id="autoBadge">–</span></h3>
+          <div class="spread" style="gap:10px;align-items:center">
+            <div style="min-width:0">
+              <div style="font-weight:600;font-size:13px" id="autoLine">Đang tải…</div>
+              <div class="mono" id="autoSub" style="font-size:11px">–</div>
+            </div>
+            <button class="btn sm" id="autoBtn" onclick="checkNow()" style="flex:0 0 auto">⚡ Kiểm ngay</button>
+          </div>
+        </div>
+        <div class="card">
           <h3>🏢 Danh sách <span class="tag" id="providersCount"></span></h3>
           <div class="rowflex" style="margin-bottom:8px">
             <input id="providerSearch" placeholder="Tìm nhà cung cấp hoặc model (tên, url)…" oninput="renderProviders()" style="flex:1">
@@ -1080,7 +1090,7 @@ function show(id){
   if($("pageTitle")) $("pageTitle").textContent = TITLES[id]||"Gateway";
   window.scrollTo({top:0,behavior:"smooth"});
   if(id==="dashboard") loadDashboard();
-  if(id==="keys") loadProviders();
+  if(id==="keys"){ loadProviders(); loadAutoStatus(); }
   if(id==="logs") loadLogs();
   if(id==="settings") loadSettings();
   if(id==="config") loadConfig();
@@ -1118,6 +1128,72 @@ async function loadDashboard(){
     $("statBox").innerHTML = emptyBox("⚠️","Không kết nối được gateway. Kiểm tra key hoặc server.");
   }
 }
+/* ---------- tự động kiểm key & model ---------- */
+let autoPoll = null;
+function fmtSecs(s){
+  s = Math.max(0, Math.round(Number(s)||0));
+  if(s < 60) return s+" giây";
+  const m = Math.round(s/60);
+  return m < 60 ? m+" phút" : Math.round(m/60)+" giờ";
+}
+async function loadAutoStatus(){
+  try{
+    const d = await api("/gateway/auto/status");
+    CACHE.auto = d; CACHE.autoAt = Date.now();
+    renderAutoStatus();
+  }catch(e){
+    if($("autoLine")) $("autoLine").textContent = "Không đọc được trạng thái tự động";
+    if($("autoSub")) $("autoSub").textContent = e.message;
+  }
+}
+function renderAutoStatus(){
+  const d = CACHE.auto;
+  const b = $("autoBadge"); if(!b) return;
+  if(!d){ b.className="badge neutral"; b.textContent="–"; return; }
+  if(d.busy){ b.className="badge neutral"; b.textContent="đang kiểm"; }
+  else if(d.enabled){ b.className="badge ok"; b.textContent="đang bật"; }
+  else { b.className="badge off"; b.textContent="đang tắt"; }
+  const line = d.last_message || (d.enabled ? "chưa chạy vòng nào" : "đang tắt");
+  $("autoLine").textContent = line;
+  const parts = [];
+  if(d.pending_models) parts.push(d.pending_models+" model chờ kiểm");
+  if(d.due_keys) parts.push(d.due_keys+" key chờ thử lại");
+  if(d.enabled && d.next_at && !d.busy){
+    const left = (Number(d.next_at)*1000 - Date.now())/1000;
+    if(left > 0) parts.push("lần tới sau "+fmtSecs(left));
+  }
+  if(d.last_error) parts.push("lỗi: "+d.last_error);
+  $("autoSub").textContent = parts.length ? parts.join(" · ") : "không còn việc tồn";
+  const btn = $("autoBtn");
+  if(btn){ btn.disabled = !!d.busy; btn.textContent = d.busy ? "⏳ Đang kiểm…" : "⚡ Kiểm ngay"; }
+}
+function stopAutoPoll(){ if(autoPoll){ clearInterval(autoPoll); autoPoll=null; } }
+async function checkNow(){
+  const btn = $("autoBtn");
+  if(btn){ btn.disabled = true; btn.textContent = "⏳ Đang kiểm…"; }
+  try{
+    const r = await api("/gateway/auto/check",{method:"POST",body:JSON.stringify({force:true})});
+    if(r && r.status) { CACHE.auto = r.status; renderAutoStatus(); }
+    stopAutoPoll();
+    let n = 0;
+    autoPoll = setInterval(async ()=>{
+      n++;
+      await loadAutoStatus();
+      const d = CACHE.auto || {};
+      if(!d.busy || n >= 40){
+        stopAutoPoll();
+        const msg = (CACHE.auto||{}).last_message || "";
+        toast(msg ? "Xong: "+msg : "Đã kiểm xong");
+        await loadProviders();
+      }
+    }, 1200);
+  }catch(e){
+    toast("Lỗi: "+e.message);
+    stopAutoPoll();
+    renderAutoStatus();
+  }
+}
+
 /* ---------- keys ---------- */
 async function testKey(id){
   try{ const r=await api("/gateway/keys/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Key OK":"Key lỗi: "+(r.message||"")); loadProviders(); }
@@ -1534,11 +1610,15 @@ function prettyKey(k){
     client_key_required:"Bắt buộc client key",rate_limit_enabled:"Bật giới hạn tốc độ",
     rate_limit_rpm:"Giới hạn request/phút",rate_limit_burst:"Burst cho phép",
     log_body_enabled:"Ghi nội dung request/response",log_retention_days:"Giữ log (ngày)",
-    max_log_count:"Số log tối đa",background:"Chạy nền"
+    max_log_count:"Số log tối đa",background:"Chạy nền",
+    auto_check:"Tự kiểm key & model trong nền",auto_check_secs:"Chu kỳ kiểm (giây)",
+    auto_check_batch:"Số model mỗi vòng",hide_unverified:"Chỉ hiện model đã kiểm thấy dùng được",
+    model_retry_secs:"Thử lại model lỗi sau (giây)",model_stale_secs:"Kiểm lại model tốt sau (giây)",
+    key_retry_secs:"Thử lại key lỗi sau (giây)",key_wait_max:"Chờ key rảnh tối đa (giây)"
   };
   return map[k] || k.replace(/_/g," ");
 }
-const BOOL_KEYS = new Set(["lan_enabled","cors_enabled","tls_enabled","client_key_required","rate_limit_enabled","log_body_enabled","background"]);
+const BOOL_KEYS = new Set(["lan_enabled","cors_enabled","tls_enabled","client_key_required","rate_limit_enabled","log_body_enabled","background","auto_check","hide_unverified"]);
 const SELECT_KEYS = {tls_mode:[["none","Không dùng"],["selfsigned","Tự ký"],["imported","Cert có sẵn"]]};
 function fieldType(k,v){
   if(BOOL_KEYS.has(k)) return "bool";
@@ -1553,6 +1633,7 @@ async function loadSettings(){
     const d = await api("/gateway/settings");
     const s = d.settings||{};
     const groups = [
+      {t:"🤖 Tự động kiểm key & model", keys:["auto_check","auto_check_secs","auto_check_batch","hide_unverified","model_retry_secs","model_stale_secs","key_retry_secs","key_wait_max"]},
       {t:"🌐 Mạng", keys:["host","port","lan_enabled","cors_enabled","tls_enabled","tls_mode","tls_cert_path","tls_key_path"]},
       {t:"🔐 Bảo mật & giới hạn", keys:["client_key_required","rate_limit_enabled","rate_limit_rpm","rate_limit_burst"]},
       {t:"📄 Log", keys:["log_body_enabled","log_retention_days","max_log_count"]},
@@ -1616,7 +1697,7 @@ function toggleSwitch(el){
 async function saveSettings(){
   const inputs=document.querySelectorAll("#settingsForm input[name], #settingsForm select[name]");
   const obj={}; inputs.forEach(i=>{obj[i.name]=i.value;});
-  try{ await api("/gateway/settings",{method:"POST",body:JSON.stringify(obj)}); toast("Đã lưu cài đặt"); }
+  try{ await api("/gateway/settings",{method:"POST",body:JSON.stringify(obj)}); toast("Đã lưu cài đặt"); loadAutoStatus(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 async function addClientKey(){

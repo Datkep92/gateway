@@ -41,6 +41,16 @@ DEFAULT_SETTINGS = {
         # chỉ dùng model miễn phí / rẻ nhất, bật sẵn
         "free_models_only": "1",
         "auto_discover_models": "1",
+        # tự kiểm tra ở nền: model mới thêm, model lỗi, model lâu chưa kiểm, key bị tắt do lỗi
+        "auto_check": "1",            # 0/1: bật tác vụ tự kiểm tra
+        "auto_check_secs": "300",     # chu kỳ mỗi vòng kiểm (giây)
+        "auto_check_batch": "8",      # số model kiểm mỗi vòng
+        "model_retry_secs": "300",    # model lỗi: thử lại sau bao lâu
+        "model_stale_secs": "21600",  # model tốt: kiểm lại sau bao lâu (6 giờ)
+        "key_retry_secs": "1800",     # key bị tắt do lỗi: thử lại sau bao lâu
+        "key_wait_max": "8",          # chờ tối đa bao lâu khi mọi key đang nghỉ (giây)
+        # 1: chỉ liệt kê model đã kiểm tra thấy dùng được (ẩn cả model chưa kiểm)
+        "hide_unverified": "0",
 }
 
 def init_db():
@@ -111,12 +121,15 @@ def init_db():
                       ("last_seen_at", "REAL"),
                       ("health", "TEXT NOT NULL DEFAULT 'unknown'"),
                       ("last_test_at", "REAL"),
-                      ("last_test_message", "TEXT")):
+                      ("last_test_message", "TEXT"),
+                      ("retry_at", "REAL")):
         _ensure_column(c, "gateway_models", col, decl)
     # nâng cấp cột cho api_keys
     for col, decl in (("health", "TEXT NOT NULL DEFAULT 'unknown'"),
                       ("last_test_at", "REAL"),
-                      ("last_test_message", "TEXT")):
+                      ("last_test_message", "TEXT"),
+                      ("auto_disabled", "INTEGER NOT NULL DEFAULT 0"),
+                      ("retry_at", "REAL")):
         _ensure_column(c, "api_keys", col, decl)
     c.commit()
 
@@ -257,18 +270,84 @@ def set_key_health(kid, health, message=""):
     c.commit()
     c.close()
 
-def set_model_health(mid, health, message=""):
+def set_model_health(mid, health, message="", retry_in=None):
+    """Ghi sức khỏe model; retry_in = giây tới lần tự kiểm kế tiếp (mặc định theo sức khỏe)."""
+    if retry_in is None:
+        retry_in = model_retry_after(health)
     c = conn()
-    c.execute("UPDATE gateway_models SET health=?, last_test_at=?, last_test_message=? WHERE id=?",
-              (health, now(), (message or "")[:300], mid))
+    c.execute("UPDATE gateway_models SET health=?, last_test_at=?, last_test_message=?, retry_at=? WHERE id=?",
+              (health, now(), (message or "")[:300], now() + float(retry_in), mid))
     c.commit()
     c.close()
 
-def list_models(enabled_only=False):
+def float_setting(key, default):
+    """Đọc một cài đặt dạng số, luôn trả về số dù giá trị hỏng."""
+    try:
+        return float(get_setting(key, default))
+    except (TypeError, ValueError):
+        return float(default)
+
+def model_retry_after(health):
+    """Bao lâu nữa thì tự kiểm lại model ở trạng thái này (giây)."""
+    if health == "ok":
+        return float_setting("model_stale_secs", 21600)
+    if health == "fail":
+        return float_setting("model_retry_secs", 300)
+    return 0.0
+
+def due_models(limit=8, force=False):
+    """Model cần tự kiểm: chưa kiểm bao giờ, đã tới hạn thử lại, hoặc lâu chưa kiểm.
+
+    force=True (nút "kiểm ngay"): bỏ qua hẹn giờ, lấy cả model vừa kiểm xong,
+    cũ nhất trước.
+    """
     c = conn()
-    q = "SELECT * FROM gateway_models"
+    if force:
+        rows = c.execute("""SELECT id, provider, health, last_test_at FROM gateway_models
+                            WHERE enabled=1 AND available=1
+                            ORDER BY last_test_at IS NOT NULL, last_test_at, provider, id
+                            LIMIT ?""", (int(limit),)).fetchall()
+    else:
+        rows = c.execute("""SELECT id, provider, health, last_test_at FROM gateway_models
+                            WHERE enabled=1 AND available=1 AND (retry_at IS NULL OR retry_at <= ?)
+                            ORDER BY (retry_at IS NOT NULL), retry_at, provider, id LIMIT ?""",
+                         (now(), int(limit))).fetchall()
+    c.close()
+    return [dict(r) for r in rows]
+
+def pending_model_count():
+    """Số model còn chờ tự kiểm."""
+    c = conn()
+    row = c.execute("""SELECT COUNT(*) FROM gateway_models
+                       WHERE enabled=1 AND available=1 AND (retry_at IS NULL OR retry_at <= ?)""",
+                    (now(),)).fetchone()
+    c.close()
+    return int(row[0]) if row else 0
+
+def mark_provider_models_due(provider):
+    """Đưa model của một ncc vào hàng chờ tự kiểm ngay (key vừa sống lại sau lỗi)."""
+    if not provider:
+        return 0
+    n = P.canonical(provider) or provider
+    c = conn()
+    cur = c.execute("""UPDATE gateway_models SET retry_at=?
+                       WHERE provider=? AND enabled=1 AND available=1""", (now(), n))
+    k = cur.rowcount
+    c.commit()
+    c.close()
+    return int(k or 0)
+
+def list_models(enabled_only=False, verified_only=False):
+    """Danh sách model. verified_only=True: chỉ model đã tự kiểm thấy dùng được."""
+    c = conn()
+    where = []
     if enabled_only:
-        q += " WHERE enabled=1 AND available=1"
+        where.append("enabled=1 AND available=1")
+    if verified_only:
+        where.append("health='ok'")
+    q = "SELECT * FROM gateway_models"
+    if where:
+        q += " WHERE " + " AND ".join(where)
     rows = c.execute(q + " ORDER BY provider, is_free DESC, id").fetchall()
     c.close()
     return rows
