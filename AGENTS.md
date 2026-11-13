@@ -37,6 +37,7 @@ python3 Tests/session_test.py         # chạy thật gateway-session: cha chế
 ## Quy ước code
 - `server.py`: HTTP + các endpoint `/v1/*` và `/gateway/*`. `providers.py`: nhận diện nhà cung cấp, luật model miễn phí. `proxy.py`: gọi thượng nguồn. `db.py`: SQLite. `static/index.html`: toàn bộ giao diện.
 - Chuỗi động đặt vào thuộc tính `onclick="…'${jsq(x)}'…"` phải qua `jsq()` (an toàn cho cả chuỗi JS trong attribute); `esc()` chỉ dùng cho nội dung chữ/HTML.
+- Markup sinh bằng `innerHTML` **không được lồng `<button>` trong `<button>`** (hay `<a>` trong `<a>`): HTML tự đóng thẻ ngoài, phần còn lại thành anh em trong `.item` (grid) nên mỗi thứ một dòng và giãn hết chiều ngang — đúng gốc lỗi bố cục thẻ nhà cung cấp đã gặp (commit cdb581a). Thẻ vừa hiện chữ vừa chứa nút thì dùng `<div role="button" tabindex="0" onclick=...>`.
 - Endpoint `/gateway/*` chỉ cho máy này (loopback) hoặc khi có client key hợp lệ. Riêng **xuất sao lưu luôn cần client key** (đã thử: loopback không key → 401), còn **nhập sao lưu và khởi động lại thì loopback không key vẫn được** (máy mới chưa có key vẫn khôi phục được).
 - Gọi API mà không gửi tên model thì dùng model mặc định; model mặc định **phải là model trò chuyện**, bỏ qua model nhúng/embedding (`chat_model()` trong `server.py`).
 - `db.init_db()` phải chạy trước `db.set_setting` (không thì lỗi `no such table: settings`).
