@@ -171,6 +171,14 @@ html[data-theme="light"] .badge.off{color:#b91c1c}
 .prov-sep{opacity:.5}
 .prov-url-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
 .prov-url-row .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.prov-title-btns{display:flex;gap:4px;margin-left:auto;flex-shrink:0}
+.prov-modellist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
+.model-tile{border:1px solid var(--border);border-radius:10px;padding:8px;background:var(--card);min-width:0}
+.model-tile .mt-top{display:flex;align-items:center;gap:6px;min-width:0}
+.model-tile .mt-name{flex:1;min-width:0;font-weight:650;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-tile .mt-id{font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.model-tile .mt-prov{font-size:10px;color:var(--muted);margin-top:2px}
+.model-tile .mt-msg{font-size:10.5px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
 .prov-actions .btn{width:100%}
 .prov-url-btns{display:flex;gap:4px;flex-shrink:0}
 .prov-model-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)}
@@ -1214,7 +1222,10 @@ function renderProviders(){
           <div class="prov-meta">
             <div class="prov-line1">
               <span class="prov-name">${esc(displayName)}</span>
-              ${p.key_url && p.name !== "openai" && p.name !== "anthropic" && p.name !== "deepseek" && p.name !== "opencode" ? `<span class="prov-web">${esc(p.key_url)}</span>` : ""}
+              <span class="prov-title-btns">
+                <button class="btn sm icon" onclick="event.stopPropagation();copyValue('${jsq(p.base_url||"")}','URL')" title="Copy URL">📋</button>
+                <button class="btn sm icon" onclick="event.stopPropagation();window.open('${jsq(p.base_url||"")}','_blank')" title="Mở URL">↗</button>
+              </span>
             </div>
             <div class="prov-line2">
               <span>${esc(p.key_count)} key</span>
@@ -1224,33 +1235,24 @@ function renderProviders(){
               <span class="badge ${p.connected?'ok':'off'}" style="font-size:10.5px;padding:2px 8px">${p.connected?"đã nối":"chưa key"}</span>
             </div>
           </div>
-          <span class="chev" id="chev_${safe}">▸</span>
+          <span class="chev" id="chev_${safe}">⏽</span>
         </button>
         <div id="prov_detail_${safe}" class="prov-detail" style="display:none">
-          <div class="prov-url-row">
-            <span style="font-size:11.5px;color:var(--muted);font-weight:600;min-width:32px">${esc(p.protocol||"–")}</span>
-            <span class="mono" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${esc(p.base_url||"–")}</span>
-            <span class="prov-url-btns">
-              <button class="btn sm" onclick="event.stopPropagation();copyValue('${jsq(p.base_url||"")}','URL')" title="Copy URL">📋</button>
-              ${p.key_url?`<button class="btn sm" onclick="event.stopPropagation();copyValue('${jsq(p.key_url)}','Web')" title="Copy web">📋</button>
-              <button class="btn sm" onclick="event.stopPropagation();window.open('${jsq(p.key_url)}','_blank')" title="Mở web">↗</button>`:""}
-            </span>
-          </div>
           <div class="prov-keys">${keysHtml}</div>
           <div class="prov-models-section" style="margin-top:8px">
             <div class="rowflex" style="align-items:center;gap:6px;margin-bottom:4px">
-              <button class="btn sm" onclick="event.stopPropagation();toggleProvModels('${safe}')" id="provmodelstoggle_${safe}" title="Đóng/mở danh sách model">${autoOpenSet.has(p.name)?"▾":"▸"} Models (${(CACHE.models||[]).filter(m=>m.provider===p.name).length})</button>
+              <button class="btn sm" onclick="event.stopPropagation();toggleProvModels('${safe}')" id="provmodelstoggle_${safe}" title="Đóng/mở danh sách model">${autoOpenSet.has(p.name)?"⏼":"⏽"} Models (${(CACHE.models||[]).filter(m=>m.provider===p.name).length})</button>
             </div>
             <div id="provmodels_${safe}" style="display:${autoOpenSet.has(p.name)?"block":"none"}">
-              <div id="provmodellist_${safe}" class="list"></div>
+              <div id="provmodellist_${safe}" class="prov-modellist"></div>
             </div>
           </div>
-          <div class="prov-actions" style="margin-top:4px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
-            <button class="btn sm" onclick="event.stopPropagation();toggleAddKey('${jsq(p.name)}')" title="Thêm key">➕ Key</button>
-            <button class="btn sm" onclick="event.stopPropagation();reloadProvModels('${jsq(p.name)}','${safe}')" title="Tải DS model">🔄 Model</button>
-            <button class="btn sm" onclick="event.stopPropagation();testProvModels('${jsq(p.name)}')" title="Test model">🧪 Test</button>
-            <button class="btn sm" onclick="event.stopPropagation();toggleEditProv('${jsq(p.name)}')" title="Sửa ncc">✏️ Sửa</button>
-            <button class="btn sm danger" onclick="event.stopPropagation();delProvider('${jsq(p.name)}')" title="Xóa ncc">🗑 Xóa</button>
+          <div class="prov-actions" style="margin-top:4px;display:grid;grid-template-columns:repeat(5,1fr);gap:4px">
+            <button class="btn sm icon" onclick="event.stopPropagation();toggleAddKey('${jsq(p.name)}')" title="Thêm key">➕</button>
+            <button class="btn sm icon" onclick="event.stopPropagation();reloadProvModels('${jsq(p.name)}','${safe}')" title="Tải DS model">🔄</button>
+            <button class="btn sm icon" onclick="event.stopPropagation();testProvModels('${jsq(p.name)}')" title="Test model">🧪</button>
+            <button class="btn sm icon" onclick="event.stopPropagation();toggleEditProv('${jsq(p.name)}')" title="Sửa ncc">✏️</button>
+            <button class="btn sm icon danger" onclick="event.stopPropagation();delProvider('${jsq(p.name)}')" title="Xóa ncc">🗑</button>
           </div>
           <div id="addkey_${safe}" style="display:none;margin-top:8px">
             <div class="grid2">
@@ -1287,7 +1289,7 @@ function toggleProvDetail(name){
   if(!el) return;
   const open = el.style.display==="none" || !el.style.display;
   el.style.display = open ? "block" : "none";
-  if(chev) chev.textContent = open ? "▾" : "▸";
+  if(chev) chev.textContent = open ? "⏼" : "⏽";
 }
 function refreshProvModelLists(){
   (CACHE.providers||[]).forEach(p=>{
@@ -1300,7 +1302,7 @@ function refreshProvModelLists(){
     if(btn){
       const cnt = (CACHE.models||[]).filter(m=>m.provider===p.name).length;
       const open = el && el.style.display!=="none" && el.style.display!=="";
-      btn.textContent = (open?"▾":"▸") + " Models ("+cnt+")";
+      btn.textContent = (open?"⏼":"⏽") + " Models ("+cnt+")";
     }
     // cập nhật số model đang bật trong header nhà cung cấp
     const cntSpan = $("provmodelcount_"+safe);
@@ -1319,7 +1321,7 @@ function toggleProvModels(safe){
   const prov = (CACHE.providers||[]).find(p=>p.name.replace(/[^a-zA-Z0-9]/g,"_")===safe);
   const name = prov ? prov.name : safe;
   const cnt = (CACHE.models||[]).filter(m=>m.provider===name).length;
-  if(btn) btn.textContent = (open?"▾":"▸") + " Models ("+cnt+")";
+  if(btn) btn.textContent = (open?"⏼":"⏽") + " Models ("+cnt+")";
   if(open) renderProvModelList(name, safe);
 }
 function renderProvModelList(name, safe){
@@ -1339,18 +1341,19 @@ function renderProvModelList(name, safe){
   if(q) models = models.filter(m=>modelMatches(m,q));
   if(!models.length){ el.innerHTML = emptyBox("🧠", (CACHE.models||[]).filter(m=>m.provider===name).length?"Không có model nào khớp.":"Chưa có model nào."); return; }
   el.innerHTML = models.map(m=>`
-    <div class="item" style="padding:8px 10px">
-      <div class="top">
+    <div class="model-tile">
+      <div class="mt-top">
         <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
-        <div class="name" style="font-size:13px">${esc(m.display_name||m.id)}</div>
+        <div class="mt-name">${esc(m.display_name||m.id)}</div>
         <span class="prov-key-btns">
           <button class="btn sm icon" onclick="event.stopPropagation();testModel('${jsq(m.id)}')" title="Test model">🧪</button>
           <button class="btn sm icon" onclick="event.stopPropagation();toggleModel('${jsq(m.id)}',${!m.enabled})" title="${m.enabled?'Tắt':'Bật'}">${m.enabled?'🟢':'⚪'}</button>
           <button class="btn sm icon danger" onclick="event.stopPropagation();delModel('${jsq(m.id)}')" title="Xóa model">🗑</button>
         </span>
       </div>
-      <div class="mono" style="font-size:10.5px">${esc(m.id)}</div>
-      ${m.last_test_message?`<div class="kv" style="font-size:10.5px"><span class="k">Kết quả</span><span class="v">${esc(m.last_test_message)}</span></div>`:""}
+      <div class="mt-id">${esc(m.id)}</div>
+      ${q?`<div class="mt-prov">${esc(m.provider)}</div>`:""}
+      ${m.last_test_message?`<div class="mt-msg">${esc(m.last_test_message)}</div>`:""}
     </div>`).join("");
 }
 async function reloadProvModels(name, safe){
@@ -1456,7 +1459,7 @@ async function toggleModel(id,enabled){
 async function testModel(id){
   try{ const r=await api("/gateway/models/test",{method:"POST",body:JSON.stringify({id})}); toast(r.ok?"Model OK":"Model lỗi: "+(r.message||"")); await loadModels();
     const m=(CACHE.models||[]).find(x=>x.id===id);
-    if(m){ const safe=m.provider.replace(/[^a-zA-Z0-9]/g,"_"); const el=$("provmodels_"+safe); if(el){ el.style.display="block"; renderProvModelList(m.provider,safe); const btn=$("provmodelstoggle_"+safe); if(btn){ const cnt=(CACHE.models||[]).filter(x=>x.provider===m.provider).length; btn.textContent="▾ Models ("+cnt+")"; } } }
+    if(m){ const safe=m.provider.replace(/[^a-zA-Z0-9]/g,"_"); const el=$("provmodels_"+safe); if(el){ el.style.display="block"; renderProvModelList(m.provider,safe); const btn=$("provmodelstoggle_"+safe); if(btn){ const cnt=(CACHE.models||[]).filter(x=>x.provider===m.provider).length; btn.textContent="⏼ Models ("+cnt+")"; } } }
     refreshProvModelLists();
   }
   catch(e){ toast("Lỗi: "+e.message); }
@@ -1475,7 +1478,7 @@ async function testProvModels(name){
     await loadModels();
     const safe=name.replace(/[^a-zA-Z0-9]/g,"_");
     const el=$("provmodels_"+safe);
-    if(el){ el.style.display="block"; renderProvModelList(name,safe); const btn=$("provmodelstoggle_"+safe); if(btn){ const cnt=(CACHE.models||[]).filter(x=>x.provider===name).length; btn.textContent="▾ Models ("+cnt+")"; } }
+    if(el){ el.style.display="block"; renderProvModelList(name,safe); const btn=$("provmodelstoggle_"+safe); if(btn){ const cnt=(CACHE.models||[]).filter(x=>x.provider===name).length; btn.textContent="⏼ Models ("+cnt+")"; } }
     refreshProvModelLists();
   }catch(e){ toast("Lỗi: "+e.message); }
 }
