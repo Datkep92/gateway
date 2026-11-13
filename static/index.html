@@ -1219,7 +1219,7 @@ function renderProviders(){
         : (p.label || p.name);
       return `
       <div class="item prov-item" id="prov_${safe}">
-        <button type="button" class="prov-head" onclick="toggleProvDetail('${jsq(p.name)}')">
+        <div class="prov-head" role="button" tabindex="0" onclick="toggleProvDetail('${jsq(p.name)}')">
           <div class="prov-meta">
             <div class="prov-line1">
               <span class="prov-name">${esc(displayName)}</span>
@@ -1237,7 +1237,7 @@ function renderProviders(){
             </div>
           </div>
           <span class="chev" id="chev_${safe}">⏽</span>
-        </button>
+        </div>
         <div id="prov_detail_${safe}" class="prov-detail" style="display:none">
           <div class="prov-keys">${keysHtml}</div>
           <div class="prov-models-section" style="margin-top:8px">
