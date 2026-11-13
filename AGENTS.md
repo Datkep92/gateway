@@ -8,6 +8,8 @@ screen -L -Logfile run.log -dmS gateway python3 main.py   # chạy nền, log v�
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:15199/   # 200 là sống
 ```
 - Cổng đọc từ setting `port` trong `data/gateway.db` (đang dùng `15199`).
+- **Từ 1.3.0 nên dựng cổng bằng bộ chạy phiên**: `screen -dmS gateway /var/jb/bin/sh /var/jb/usr/bin/gateway-session standalone` (app Cổng và `gatewayctl on` cũng làm việc này). Bộ chạy phiên tự dò cổng và tự dựng lại `main.py` khi treo.
+- **Chạy từ phiên agent phải tách khỏi nhóm tiến trình**: tiến trình nền dựng trong `shell_run` bị giết cùng nhóm khi lệnh xong — gọi thẳng `/var/jb/usr/bin/gatewayctl restart` trong `shell_run` (thử 10:21 ngày 13-11) làm cổng **tắt hẳn**, không kịp ghi dòng nào vào `run.log` và không còn tiến trình nào. Máy không có `setsid`; cách đúng là `screen -dmS gateway …` như trên rồi `curl` kiểm (200) và `ps` xem `SCREEN` + `gateway-session` + `main.py`.
 - **Khởi động lại**: `screen -S gateway -X quit; pkill -f "python3 main.py"; sleep 1; screen -L -Logfile run.log -dmS gateway python3 main.py`.
   Kiểm `pgrep -f "python3 main.py"` sau khi dừng: tiến trình con có thể sống sót khỏi session.
 - Trang HTML được đọc lại từ đĩa mỗi lần gọi nên sửa `static/index.html` là thấy ngay; **sửa `server.py` thì phải khởi động lại**.
