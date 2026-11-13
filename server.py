@@ -983,6 +983,15 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             c.close()
             json_response(self, 200, {"ok": True})
             return
+        if path.startswith("/gateway/providers/"):
+            name = urllib.parse.unquote(path.split("/gateway/providers/", 1)[-1])
+            fields = {}
+            for k in ("base_url", "key_url", "protocol", "chat_path", "messages_path", "models_path"):
+                if k in j and j.get(k) is not None:
+                    fields[k] = j.get(k)
+            ok = db.update_provider(name, **fields)
+            json_response(self, 200 if ok else 400, {"ok": ok})
+            return
         json_response(self, 404, {"error":{"message":"not found"}})
 
     def _gateway_delete(self, path):
