@@ -24,6 +24,15 @@ Màn kết quả hiện: số model dò được, model mặc định, chế đ�
 
 Gọi API không cần gửi tên model: thiếu `model` thì gateway dùng model mặc định (luôn là model trò chuyện, không chọn model nhúng/embedding).
 
+## Cài bằng gói (rootless)
+Bản phát hành đóng gói app "Cổng" và bộ chạy cổng theo phiên (không kèm mã máy chủ). Tải tệp `.deb` ở [Releases](https://github.com/Datkep92/gateway/releases) rồi cài bằng Sileo/Zebra, hoặc:
+
+```bash
+dpkg -i wiki.qaq.gateway_1.5.1_iphoneos-arm64.deb
+gatewayctl on            # mở cổng bằng tay
+gatewayctl state         # dang_chay | dang_treo | khong_chay
+```
+
 ## Client key
 Mỗi lần thiết lập một bước cấp thêm một client key mới và hiện ngay trong màn kết quả; key cũ vẫn dùng được (xoá ở mục Keys nếu không cần). Client gọi API bằng `Authorization: Bearer <key>` (hoặc `x-api-key`).
 
