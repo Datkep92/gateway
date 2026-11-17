@@ -1,5 +1,5 @@
 #!/bin/sh
-# gatewayctl on|off|restart|status|state|pid — mở/dừng cổng Gateway bằng tay.
+# gatewayctl on|off|restart|status|state|pid|url|appkey — mở/dừng cổng Gateway bằng tay.
 #
 # Từ 1.3.0 cổng KHÔNG còn dịch vụ nền tự chạy: nó sống theo phiên Apelin
 # (apelind chạy <prefix>/usr/bin/gateway-session khi mở cổng, và tiến trình đó
@@ -8,6 +8,10 @@
 #   on     : chạy gateway-session ở chế độ chạy tay (standalone) rồi chờ cổng trả lời.
 #   off    : dừng hẳn — hết tiến trình phiên, hết main.py, cổng đóng.
 #   state  : một từ cho máy đọc — dang_chay | dang_treo | khong_chay.
+#   url    : một dòng "http://127.0.0.1:<cổng>" (một từ, cho máy đọc).
+#   appkey : một dòng là client key của app "Cổng" — key riêng của app, cấp một lần
+#            rồi giữ nguyên trong <dự án>/data/app.key (chỉ app đọc được, chmod 600);
+#            key đó bị xoá hoặc tắt trong bảng quản lý thì lần sau tự cấp key mới.
 set -u
 
 # pkill/pgrep ở /usr/local/bin, curl/launchctl ở /usr/bin — đặt PATH để chạy được
@@ -21,7 +25,7 @@ LBL="wiki.qaq.gateway"
 LC="$JB/usr/bin/launchctl"
 [ -x "$LC" ] || LC="/bin/launchctl"
 
-PROJ="/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway"
+PROJ="${GATEWAY_PROJECT_DIR:-/private/var/mobile/Documents/wiki.qaq.apelin/Projects/Gateway}"
 LOG="$PROJ/run.log"
 OLD_FLAG="$PROJ/data/paused"           # cờ của bản ≤1.2.x, nay không còn nghĩa
 SESS="$JB/usr/bin/gateway-session"
@@ -38,8 +42,8 @@ case "$PORT" in
 esac
 
 page() { curl -s -m 3 "http://127.0.0.1:$PORT/" 2>/dev/null || true; }
-main_pid() { pgrep -f "Projects/Gateway/main\.py" 2>/dev/null || true; }
-serving_pids() { pgrep -f "Projects/Gateway/main\.py" 2>/dev/null || true; }
+main_pid() { pgrep -f "$PROJ/main\.py" 2>/dev/null || true; }
+serving_pids() { pgrep -f "$PROJ/main\.py" 2>/dev/null || true; }
 session_pids() { pgrep -f "gateway-session" 2>/dev/null || true; }
 
 # dang_chay | dang_treo | khong_chay
@@ -53,6 +57,49 @@ state() {
         return
     fi
     if [ -n "$(page)" ]; then echo dang_chay; else echo khong_chay; fi
+}
+
+# Địa chỉ đang phục vụ (một từ, cho máy đọc).
+url() { echo "http://127.0.0.1:$PORT"; }
+
+# Client key riêng của app "Cổng": có sẵn thì in lại, chưa có thì cấp mới.
+# Key nằm trong <dự án>/data/app.key (chmod 600) — không phải key của bảng quản lý,
+# xoá file này (hoặc tắt key trong bảng) thì lần gọi sau tự cấp key mới.
+do_appkey() {
+    [ -f "$PROJ/db.py" ] || { echo "Thiếu $PROJ/db.py — chưa có dự án Gateway ở đây." >&2; exit 1; }
+    ( cd "$PROJ" && python3 - <<'PY'
+import os
+import db
+
+db.init_db()
+path = os.path.join("data", "app.key")
+raw = ""
+try:
+    with open(path, "r") as f:
+        raw = f.read().strip()
+except OSError:
+    raw = ""
+
+alive = False
+if raw:
+    c = db.conn()
+    row = c.execute("SELECT id FROM client_keys WHERE key_hash=? AND enabled=1",
+                    (db.hash_key(raw),)).fetchone()
+    c.close()
+    alive = row is not None
+
+if not alive:
+    _cid, raw = db.new_client_key("app")
+    d = os.path.dirname(os.path.abspath(path))
+    if d:
+        os.makedirs(d, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(raw + "\n")
+
+print(raw)
+PY
+    )
 }
 
 # Không còn gì chạy và cổng im hẳn.
@@ -89,10 +136,10 @@ wait_nothing() { # $1 = số giây chờ
 kill_manual() {
     # Máy này tiến trình do launchd chạy KHÔNG chết vì tín hiệu dừng êm (đã thử: TERM
     # không tác dụng), nên phải ép KILL. Vẫn gửi TERM trước để tiến trình kịp đóng DB.
-    pkill -f "Projects/Gateway/main\.py" 2>/dev/null || true
+    pkill -f "$PROJ/main\.py" 2>/dev/null || true
     pkill -f "python3 main.py" 2>/dev/null || true
     sleep 1
-    pkill -9 -f "Projects/Gateway/main\.py" 2>/dev/null || true
+    pkill -9 -f "$PROJ/main\.py" 2>/dev/null || true
     pkill -9 -f "python3 main.py" 2>/dev/null || true
     return 0
 }
@@ -165,6 +212,8 @@ case "${1:-status}" in
         do_off >/dev/null 2>&1 || true
         do_on ;;
     state)      state ;;
+    url)        url ;;
+    appkey)     do_appkey ;;
     pid)        main_pid | head -n 1; [ -n "$(main_pid)" ] || echo "-" ;;
     status)
         case "$(state)" in
@@ -180,6 +229,6 @@ case "${1:-status}" in
         echo "Phiên: $(session_pids | tr '\n' ' ')$(serving_pids | tr '\n' ' ')"
         echo "Thư mục: $PROJ" ;;
     *)
-        echo "Dùng: gatewayctl on | off | restart | state | status | pid"
+        echo "Dùng: gatewayctl on | off | restart | state | status | pid | url | appkey"
         exit 2 ;;
 esac

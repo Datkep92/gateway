@@ -34,17 +34,41 @@ def _headers(protocol, key_value):
     return {"Authorization": "Bearer " + key_value, "Content-Type": "application/json"}
 
 
-def _call(provider, path_key, body_bytes, stream):
-    """Gọi một đường dẫn của provider, thử nhiều key/nhà cung cấp khi lỗi tạm thời."""
-    primary = P.canonical(provider) or provider
-    # model trong thân để tự chuyển nhà cung cấp cùng model nếu key hết
-    model = None
+def _fallback_models(provider, excluded):
+    """Chỉ trả model chat đã bật, còn khả dụng và đã tự kiểm là tốt."""
+    c = db.conn()
+    rows = c.execute("""SELECT id FROM gateway_models
+                        WHERE provider=? AND id<>? AND enabled=1 AND available=1 AND health='ok'
+                        ORDER BY is_free DESC, id LIMIT 8""", (provider, excluded)).fetchall()
+    c.close()
+    non_chat = ("embed", "whisper", "tts", "dall-e", "moderation", "audio", "rerank",
+                "text-similarity", "image", "vision-encoder", "guard", "davinci", "babbage")
+    return [r["id"] for r in rows if not any(x in r["id"].lower() for x in non_chat)][:3]
+
+
+def _body_with_model(body_bytes, model):
     try:
-        _j = json.loads(body_bytes or b"{}")
-        if isinstance(_j, dict):
-            model = (_j.get("model") or "").strip() or None
+        obj = json.loads(body_bytes or b"{}")
+        if not isinstance(obj, dict):
+            return body_bytes
+        obj["model"] = model
+        return json.dumps(obj).encode()
     except Exception:
-        model = None
+        return body_bytes
+
+
+def _call(provider, path_key, body_bytes, stream):
+    """Gọi provider; model không khả dụng có thể chuyển sang model tốt cùng provider."""
+    primary = P.canonical(provider) or provider
+    original_body = body_bytes
+    request_json = {}
+    try:
+        parsed = json.loads(body_bytes or b"{}")
+        if isinstance(parsed, dict):
+            request_json = parsed
+    except Exception:
+        pass
+    model = (request_json.get("model") or "").strip() or None
 
     # danh sách nhà cung cấp sẽ thử: chính + các ncc khác có cùng model
     candidates = [primary]
@@ -58,7 +82,7 @@ def _call(provider, path_key, body_bytes, stream):
         finally:
             c.close()
 
-    last_err, key_id, status = b"", None, 0
+    last_err, key_id, status, used_model = b"", None, 0, model
     waited, wait_budget = 0.0, db.float_setting("key_wait_max", 8)
     for prov in candidates:
         spec = P.spec(prov)
@@ -68,34 +92,57 @@ def _call(provider, path_key, body_bytes, stream):
         if not path:
             continue
         url = spec["base_url"].rstrip("/") + path
-        # mỗi key bật được thử một lần (tối đa 4), để key lỗi chuyển sang key kế tiếp
-        attempts = max(2, min(keypool.enabled_key_count(spec["name"]), 4))
-        i = 0
-        while i < attempts:
-            key = keypool.select_key(spec["name"])
-            if key is None:
-                # mọi key đang nghỉ: chờ một chút rồi thử lại, thay vì trả lỗi ngay
-                wait = keypool.wait_ready(spec["name"])
-                if wait is None or wait <= 0 or waited + wait > wait_budget:
-                    break
-                time.sleep(wait + 0.05)
-                waited += wait
+        model_queue = [model]
+        fallback_added = False
+        model_index = 0
+        while model_index < len(model_queue):
+            current_model = model_queue[model_index]
+            used_model = current_model
+            body = original_body if current_model == model else _body_with_model(original_body, current_model)
+            # mỗi key bật được thử một lần (tối đa 4), để key lỗi chuyển sang key kế tiếp
+            attempts = max(2, min(keypool.enabled_key_count(spec["name"]), 4))
+            i, model_unavailable = 0, False
+            while i < attempts:
                 key = keypool.select_key(spec["name"])
                 if key is None:
+                    # mọi key đang nghỉ: chờ một chút rồi thử lại, thay vì trả lỗi ngay
+                    wait = keypool.wait_ready(spec["name"])
+                    if wait is None or wait <= 0 or waited + wait > wait_budget:
+                        break
+                    time.sleep(wait + 0.05)
+                    waited += wait
+                    key = keypool.select_key(spec["name"])
+                    if key is None:
+                        break
+                key_id = key["id"]
+                ok, status, resp_headers, payload = _request(
+                    url, "POST", _headers(spec["protocol"], key["key_value"]), body)
+                if ok:
+                    resp_headers = dict(resp_headers)
+                    resp_headers["X-Gateway-Model"] = current_model
+                    keypool.mark_success(key_id)
+                    return True, status, resp_headers, payload, key_id, b""
+                err_bytes = payload if isinstance(payload, (bytes, bytearray)) else b""
+                last_err = err_bytes or ("HTTP %d" % status).encode()
+                error_text = last_err.decode(errors="ignore")
+                if current_model and _model_level(status, error_text):
+                    # Model-specific errors không chứng minh key hỏng.
+                    keypool.mark_success(key_id)
+                    db.set_model_health(current_model, "fail", error_text)
+                    model_unavailable = True
+                    if current_model == model and prov == primary and not fallback_added:
+                        model_queue.extend(_fallback_models(prov, model))
+                        fallback_added = True
                     break
-            key_id = key["id"]
-            ok, status, resp_headers, payload = _request(url, "POST", _headers(spec["protocol"], key["key_value"]), body_bytes)
-            if ok:
-                keypool.mark_success(key_id)
-                return True, status, resp_headers, payload, key_id, b""
-            err_bytes = payload if isinstance(payload, (bytes, bytearray)) else b""
-            keypool.mark_failure(key_id, status)
-            if status in (401, 403):
-                db.set_key_health(key_id, "fail", "HTTP %d" % status)
-            last_err = err_bytes or ("HTTP %d" % status).encode()
-            if status not in RETRYABLE:
-                break
-            i += 1
+                keypool.mark_failure(key_id, status)
+                if status in (401, 403):
+                    db.set_key_health(key_id, "fail", "HTTP %d" % status)
+                if status not in RETRYABLE:
+                    break
+                i += 1
+            model_index += 1
+            if model_unavailable:
+                continue
     if key_id is None:
         return False, 503, {}, b"", None, json.dumps(
             {"error": {"message": "chưa có key khả dụng", "type": "no_key"}}).encode()
@@ -246,9 +293,12 @@ def _model_level(status, text):
     low = (text or "").lower()
     if "model" not in low:
         return False
+    if any(token in low for token in ("api key", "api_key", "authentication", "unauthorized")):
+        return False
     for w in ("not found", "does not exist", "doesn't exist", "not exist", "unknown model",
               "invalid model", "no such model", "unsupported model", "not available",
-              "model_not_found", "no permission to access"):
+              "model_not_found", "no permission to access", "turned off", "disabled",
+              "deactivated", "not enabled"):
         if w in low:
             return True
     return False

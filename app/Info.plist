@@ -33,13 +33,24 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.3.0</string>
+	<string>1.5.1</string>
 	<key>CFBundleVersion</key>
-	<string>4</string>
+	<string>7</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>MinimumOSVersion</key>
 	<string>15.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Trang quản lý chạy ở http://127.0.0.1 (không TLS) nên phải mở ATS.
+		     Trên iOS 10+, hễ có khoá cụ thể (ở đây là InWebContent) thì
+		     NSAllowsArbitraryLoads bị bỏ qua, nên phải đặt cả hai: WebView dùng
+		     khoá InWebContent, phần còn lại dùng khoá chung. -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 	<key>UIDeviceFamily</key>
 	<array>
 		<integer>1</integer>

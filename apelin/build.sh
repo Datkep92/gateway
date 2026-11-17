@@ -30,7 +30,9 @@ sed -e "s|@PREFIX@|${APELIN_PREFIX}|g" \
 chmod 0755 "${stage:?}/DEBIAN/postinst" "${stage:?}/DEBIAN/prerm"
 
 # ---------------------------------------------------------------------------
-# App công tắc riêng (không dùng HTML): GatewaySwitch.app
+# App "Cổng": giao diện gốc UIKit (không WebView) — bảng điều khiển như trang
+# quản lý web nhưng chạy trong app: mở/tắt cổng, nhà cung cấp, key, model, cài
+# đặt, tự kiểm, nhật ký, sao lưu/khôi phục. Trang web vẫn giữ nguyên cho máy khác.
 # Biên dịch bằng clang có sẵn trên máy, ký bằng ldid với quyền ngoài hộp cát.
 # ---------------------------------------------------------------------------
 APP_SRC="${APELIN_PROJECT_ROOT:?}/app"
@@ -52,7 +54,7 @@ fi
 mkdir -p "${APP_DIR:?}"
 "${CLANG}" -target arm64-apple-ios16.0 -isysroot "${SDK}" -fobjc-arc -O2 -Wall \
     -framework UIKit -framework Foundation -framework QuartzCore \
-    -o "${APP_DIR:?}/gwswitch" "${APP_SRC:?}/main.m"
+    -o "${APP_DIR:?}/gwswitch" "${APP_SRC:?}"/*.m
 "${LDID_BIN}" -S"${APP_SRC:?}/ents.plist" "${APP_DIR:?}/gwswitch"
 cp "${APP_SRC:?}/Info.plist" "${APP_DIR:?}/Info.plist"
 cp "${APP_SRC:?}"/AppIcon60x60@2x.png "${APP_SRC:?}"/AppIcon60x60@3x.png "${APP_DIR:?}/"
@@ -62,7 +64,7 @@ chmod 0644 "${APP_DIR:?}/Info.plist" "${APP_DIR:?}"/AppIcon60x60@*.png
 SIZE=$(du -sk "${stage:?}" | awk '{print $1}')
 cat > "${stage:?}/DEBIAN/control" <<EOF
 Package: wiki.qaq.gateway
-Version: 1.3.0
+Version: 1.5.1
 Architecture: ${APELIN_ARCHITECTURE:?}
 Installed-Size: ${SIZE:?}
 Name: Gateway (theo phiên Apelin)
@@ -70,11 +72,12 @@ Author: Datkep92
 Maintainer: Datkep92
 Section: Utilities
 Priority: optional
-Description: Cổng Gateway sống theo phiên Apelin, kèm app mở/tắt bằng tay.
+Description: Cổng Gateway sống theo phiên Apelin, kèm app mở/tắt và quản lý.
  Không còn dịch vụ nền: Apelin chạy bộ chạy cổng khi mở cổng và cổng tự tắt
  khi Apelin hết việc, nên không tốn pin lúc rảnh và không cần reboot máy.
- Kèm app GatewaySwitch (biểu tượng "Cổng") và lệnh gatewayctl on|off|restart|status
- để mở/tắt bằng tay khi cần.
+ App "Cổng" (GatewaySwitch.app) có giao diện gốc: mở/tắt cổng, xem và sửa
+ nhà cung cấp/key/model, cài đặt, tự kiểm key & model, nhật ký, sao lưu và
+ khôi phục cấu hình bằng một tệp; kèm lệnh gatewayctl on|off|restart|state|status|pid.
 EOF
 
 dpkg-deb -b --root-owner-group "${stage:?}" "${APELIN_PACKAGE_DIR:?}/" >/dev/null

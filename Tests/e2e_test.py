@@ -120,6 +120,9 @@ class MockAnthropic(http.server.BaseHTTPRequestHandler):
         body["__auth"] = self.headers.get("x-api-key", "")
         STATE["anthropic"].append(body)
         model = body.get("model")
+        if model == "mock-disabled-model":
+            self._json({"error": {"message": "model mock-disabled-model is disabled"}}, 404)
+            return
         if body.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -391,6 +394,26 @@ def main():
     check("nhập file lạ -> 400", code == 400, bad)
     code, bad2 = jcall("POST", "/gateway/config/import", {"format": "gateway-backup", "version": 1}, key=ckey)
     check("nhập file thiếu cài đặt -> 400", code == 400, bad2)
+
+    # ---- 8. fallback khi upstream báo model đã tắt ----
+    db.upsert_models("anthropic", ["mock-disabled-model"], mark_missing_unavailable=False)
+    con = db.conn()
+    con.execute("UPDATE gateway_models SET enabled=1, available=1, health='unknown' WHERE id='mock-disabled-model'")
+    con.execute("UPDATE gateway_models SET enabled=1, available=1, health='ok' WHERE id='claude-3-5-haiku-20241022'")
+    con.commit()
+    con.close()
+    before = len(STATE["anthropic"])
+    code, out = jcall("POST", "/v1/chat/completions",
+                      {"model": "mock-disabled-model", "messages": [{"role": "user", "content": "hi"}]}, key=ckey)
+    sent = STATE["anthropic"][before:]
+    con = db.conn()
+    disabled_health = con.execute("SELECT health FROM gateway_models WHERE id='mock-disabled-model'").fetchone()[0]
+    key_failures = con.execute("SELECT failure_count FROM api_keys WHERE provider='anthropic' LIMIT 1").fetchone()[0]
+    con.close()
+    check("model bị disabled được fallback -> 200", code == 200 and out.get("choices", [{}])[0].get("message", {}).get("content") == "hello-from-anthropic", out)
+    check("fallback gửi đúng model đã xác nhận", [x.get("model") for x in sent] == ["mock-disabled-model", "claude-3-5-haiku-20241022"], [x.get("model") for x in sent])
+    check("model lỗi được đánh dấu fail, model dự phòng vẫn tốt", disabled_health == "fail", disabled_health)
+    check("lỗi model không phạt API key", key_failures == 0, key_failures)
 
     httpd.shutdown()
     failed = [r for r in RESULTS if not r[1]]

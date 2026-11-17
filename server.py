@@ -400,6 +400,8 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             ok, status, headers, payload, key_id, errb = proxy.messages(provider, out_body, stream)
         else:
             ok, status, headers, payload, key_id, errb = proxy.chat(provider, out_body, stream)
+        if ok:
+            model = headers.get("X-Gateway-Model", model)
         latency = int((time.time()-t0)*1000)
         if not ok:
             self.send_response(status if status else 502)
@@ -498,6 +500,8 @@ class GatewayHandler(http.server.BaseHTTPRequestHandler):
             ok, status, headers, payload, key_id, errb = proxy.chat(provider, out_body, stream)
         else:
             ok, status, headers, payload, key_id, errb = proxy.messages(provider, out_body, stream)
+        if ok:
+            model = headers.get("X-Gateway-Model", model)
         latency = int((time.time()-t0)*1000)
         if not ok:
             self.send_response(status if status else 502)
