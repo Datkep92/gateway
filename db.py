@@ -116,13 +116,15 @@ def init_db():
     for col, decl in (("protocol", "TEXT"), ("chat_path", "TEXT"), ("messages_path", "TEXT"),
                       ("models_path", "TEXT"), ("key_url", "TEXT")):
         _ensure_column(c, "providers", col, decl)
+    # nâng cấp cột cho gateway_models
     for col, decl in (("available", "INTEGER NOT NULL DEFAULT 1"),
                       ("is_free", "INTEGER NOT NULL DEFAULT 0"),
                       ("last_seen_at", "REAL"),
                       ("health", "TEXT NOT NULL DEFAULT 'unknown'"),
                       ("last_test_at", "REAL"),
                       ("last_test_message", "TEXT"),
-                      ("retry_at", "REAL")):
+                      ("retry_at", "REAL"),
+                      ("fail_count", "INTEGER NOT NULL DEFAULT 0")):
         _ensure_column(c, "gateway_models", col, decl)
     # nâng cấp cột cho api_keys
     for col, decl in (("health", "TEXT NOT NULL DEFAULT 'unknown'"),
@@ -271,10 +273,22 @@ def set_key_health(kid, health, message=""):
     c.close()
 
 def set_model_health(mid, health, message="", retry_in=None):
-    """Ghi sức khỏe model; retry_in = giây tới lần tự kiểm kế tiếp (mặc định theo sức khỏe)."""
+    """Ghi sức khỏe model; retry_in = giây tới lần tự kiểm kế tiếp (mặc định theo sức khỏe).
+
+    Nếu health='fail' liên tiếp 3 lần, tự động tắt model (enabled=0).
+    """
     if retry_in is None:
         retry_in = model_retry_after(health)
     c = conn()
+    # đếm lỗi liên tiếp: fail tăng, ok/xác định thì reset
+    if health == "fail":
+        c.execute("UPDATE gateway_models SET fail_count=fail_count+1 WHERE id=?", (mid,))
+        # 3 lỗi liên tiếp → tắt model luôn
+        row = c.execute("SELECT fail_count FROM gateway_models WHERE id=?", (mid,)).fetchone()
+        if row and row["fail_count"] >= 3:
+            c.execute("UPDATE gateway_models SET enabled=0, available=0 WHERE id=?", (mid,))
+    else:
+        c.execute("UPDATE gateway_models SET fail_count=0 WHERE id=?", (mid,))
     c.execute("UPDATE gateway_models SET health=?, last_test_at=?, last_test_message=?, retry_at=? WHERE id=?",
               (health, now(), (message or "")[:300], now() + float(retry_in), mid))
     c.commit()

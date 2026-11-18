@@ -287,20 +287,28 @@ def test_model(model_id, timeout=45):
 
 
 def _model_level(status, text):
-    """Lỗi này có phải do model không (không tồn tại, không được phép dùng...)."""
-    if status not in (400, 404, 410, 422):
+    """Lỗi này có phải do model không (không tồn tại, không được phép dùng...).
+
+    Nhận diện cả 400/404/410/422 (không tìm thấy/chưa bật) lẫn 500/502/503/504/529
+    (lỗi phía server thượng nguồn cho model cụ thể — nhiều khả năng model đó không
+    hoạt động, không phải key bị lỗi). Các lỗi auth (401/403) không phải do model.
+    """
+    if status not in (400, 404, 410, 422, 500, 502, 503, 504, 529):
         return False
     low = (text or "").lower()
-    if "model" not in low:
+    if "api key" in low or "api_key" in low or "authentication" in low or "unauthorized" in low:
         return False
-    if any(token in low for token in ("api key", "api_key", "authentication", "unauthorized")):
-        return False
+    # những từ này chỉ có mặt trong lỗi thuộc về model, không phải lỗi auth/key chung
     for w in ("not found", "does not exist", "doesn't exist", "not exist", "unknown model",
               "invalid model", "no such model", "unsupported model", "not available",
               "model_not_found", "no permission to access", "turned off", "disabled",
-              "deactivated", "not enabled"):
+              "deactivated", "not enabled", "unavailable", "internal error",
+              "model unavailable", "model disabled", "model not available"):
         if w in low:
             return True
+    # 5xx không có text model rõ ràng → vẫn coi là lỗi model để tránh phạt key oan
+    if status >= 500:
+        return True
     return False
 
 
@@ -323,6 +331,7 @@ def traffic_model_result(model, ok, status, errb=b""):
         # mạng phía máy này, client tự ngắt, hay cổng hết key: không nói gì về model
         return
     text = errb.decode(errors="ignore") if isinstance(errb, (bytes, bytearray)) else str(errb or "")
+    # _model_level giờ nhận diện cả 500/502/503/504/529 là lỗi model
     if _model_level(status, text):
         db.set_model_health(mid, "fail", text)
     elif health == "fail":

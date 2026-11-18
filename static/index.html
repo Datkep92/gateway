@@ -1419,9 +1419,17 @@ function renderProvModelList(name, safe){
   };
   let models = (CACHE.models||[]).filter(m=>m.provider===name);
   if(q) models = models.filter(m=>modelMatches(m,q));
-  if(!models.length){ el.innerHTML = emptyBox("🧠", (CACHE.models||[]).filter(m=>m.provider===name).length?"Không có model nào khớp.":"Chưa có model nào."); return; }
-  el.innerHTML = models.map(m=>`
-    <div class="model-tile">
+  const hideUnverified = CACHE.hideUnverified && !q;
+  const hiddenModels = hideUnverified ? models.filter(m=>m.health==="fail") : [];
+  const visibleModels = hideUnverified ? models.filter(m=>m.health!=="fail") : models;
+  if(!models.length){
+    const raw = (CACHE.models||[]).filter(m=>m.provider===name).length;
+    el.innerHTML = emptyBox("🧠", raw?"Không có model nào khớp.":"Chưa có model nào."); return;
+  }
+  if(!visibleModels.length){
+    el.innerHTML = emptyBox("🧠","Không có model nào khớp."); return;
+  }
+  const renderTile = (m)=>`<div class="model-tile">
       <div class="mt-main">
         <div class="mt-top">
           <span class="badge ${m.health==='ok'?'ok':(m.health==='fail'?'off':'neutral')}" style="font-size:10px;padding:1px 6px">${m.health==='ok'?'✓':(m.health==='fail'?'✗':'?')}</span>
@@ -1436,7 +1444,30 @@ function renderProvModelList(name, safe){
         <button class="btn sm icon" onclick="event.stopPropagation();toggleModel('${jsq(m.id)}',${!m.enabled})" title="${m.enabled?'Tắt':'Bật'}">${m.enabled?'🟢':'⚪'}</button>
         <button class="btn sm icon danger" onclick="event.stopPropagation();delModel('${jsq(m.id)}')" title="Xóa model">🗑</button>
       </span>
-    </div>`).join("");
+    </div>`;
+  const expanded = (CACHE._failedExpanded||{})[safe];
+  const hiddenHtml = hideUnverified && hiddenModels.length ? `
+    <div style="margin-top:2px">
+      <label style="cursor:pointer;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px;padding:3px 0">
+        <input type="checkbox" class="failed-toggle" data-safe="${esc(safe)}" ${expanded?'checked':''} style="accent-color:var(--danger)">
+        <span style="font-size:11px">↳ Hiện ${hiddenModels.length} model lỗi</span>
+      </label>
+      <div class="failed-list" data-safe="${esc(safe)}" style="display:${expanded?'block':'none'};padding-left:12px">
+        ${hiddenModels.map(m=>renderTile(m)).join("")}
+      </div>
+    </div>` : "";
+  el.innerHTML = visibleModels.map(m=>renderTile(m)).join("") + hiddenHtml;
+  el.querySelectorAll(".failed-toggle").forEach(cb=>{
+    cb.addEventListener("change",()=>{
+      const sk=cb.dataset.safe;
+      if(!CACHE._failedExpanded) CACHE._failedExpanded={};
+      const fl=e=>{
+        const el2=$("provmodellist_"+sk);
+        if(el2){ CACHE._failedExpanded[sk]=cb.checked; renderProvModelList(name,sk); }
+      };
+      if(CACHE._failedExpanded[sk]!==cb.checked){ CACHE._failedExpanded[sk]=cb.checked; fl(); }
+    });
+  });
 }
 async function reloadProvModels(name, safe){
   const box = $("reloadbox_"+safe);
@@ -1670,6 +1701,7 @@ async function loadSettings(){
         <div class="mono" style="font-size:11px">Tạo lúc: ${esc(new Date((k.created_at||0)*1000).toLocaleString())}</div>
       </div>`).join("") : emptyBox("🔐","Chưa có client key nào.");
   }catch(e){ el.innerHTML = emptyBox("⚠️",e.message); }
+  CACHE.hideUnverified = !!(String(s.hide_unverified)==="1" || String(s.hide_unverified).toLowerCase()==="true");
 }
 function fieldRow(k,v){
   const type=fieldType(k,v);
@@ -1697,7 +1729,9 @@ function toggleSwitch(el){
 async function saveSettings(){
   const inputs=document.querySelectorAll("#settingsForm input[name], #settingsForm select[name]");
   const obj={}; inputs.forEach(i=>{obj[i.name]=i.value;});
-  try{ await api("/gateway/settings",{method:"POST",body:JSON.stringify(obj)}); toast("Đã lưu cài đặt"); loadAutoStatus(); }
+  // cache hide_unverified for model-list filtering
+  if("hide_unverified" in obj) CACHE.hideUnverified = !!(String(obj.hide_unverified)==="1");
+  try{ await api("/gateway/settings",{method:"POST",body:JSON.stringify(obj)}); toast("Đã lưu cài đặt"); loadAutoStatus(); refreshProvModelLists(); }
   catch(e){ toast("Lỗi: "+e.message); }
 }
 async function addClientKey(){
