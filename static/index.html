@@ -777,14 +777,28 @@ function renderSetupModelList(){
   const box = $("setupModelList"); if(!box) return;
   if(!setupModels.length){ box.style.display="none"; box.innerHTML=""; return; }
   box.style.display="";
-  box.innerHTML = `<label>Danh sách model dò được (${setupModels.length}) — bỏ chọn nếu không muốn lưu</label>
-    <div class="list" style="max-height:220px;overflow:auto;margin-top:6px">
+  box.innerHTML = `<label>Danh sách model dò được (<span id="setupModelCount">${setupModels.length}</span>) — bỏ chọn nếu không muốn lưu</label>
+    <input id="setupModelSearch" placeholder="🔍 Tìm model…" autocapitalize="off" autocorrect="off" spellcheck="false"
+           style="margin-top:6px;padding:10px 14px;min-height:44px" oninput="filterSetupModels(this.value)">
+    <div class="list" id="setupModelRows" style="max-height:220px;overflow:auto;margin-top:6px">
       ${setupModels.map(m=>`<label class="rowflex" style="margin:4px 0">
         <input type="checkbox" data-model="${esc(m.id)}" checked style="width:auto;margin:0">
         <span class="mono" style="flex:1">${esc(m.id)}</span>
         <span class="badge ${m.free?'ok':'neutral'}">${m.free?'miễn phí':'tính phí'}</span>
       </label>`).join("")}
     </div>`;
+}
+function filterSetupModels(q){
+  q = String(q||"").trim().toLowerCase();
+  const rows = document.querySelectorAll("#setupModelRows label");
+  let shown = 0;
+  rows.forEach(r=>{
+    const hit = !q || String(r.textContent||"").toLowerCase().includes(q);
+    r.style.display = hit ? "" : "none";
+    if(hit) shown++;
+  });
+  const cnt = $("setupModelCount");
+  if(cnt) cnt.textContent = q ? shown+"/"+setupModels.length : String(setupModels.length);
 }
 async function loadSetupModels(){
   const key = $("setupKey").value.trim();
@@ -1483,18 +1497,35 @@ async function reloadProvModels(name, safe){
     // get current enabled set
     await loadModels();
     const enabledSet = new Set((CACHE.models||[]).filter(m=>m.provider===name && m.enabled).map(m=>m.id));
-    box.innerHTML = `<div style="font-size:12.5px;font-weight:600;margin-bottom:6px">Chọn model sử dụng (${ids.length})</div>` +
-      ids.map(id=>`
-        <label class="prov-model-row" style="cursor:pointer">
-          <input type="checkbox" class="prov-model-chk" data-id="${esc(id)}" ${enabledSet.has(id)?"checked":""}>
-          <span class="prov-model-name">${esc(id)}</span>
-        </label>`).join("") +
-      `<div class="rowflex" style="margin-top:8px;gap:4px">
+    box.innerHTML = `<div style="font-size:12.5px;font-weight:600;margin-bottom:6px">Chọn model sử dụng (<span id="provmodelfindcnt_${safe}">${ids.length}</span>)</div>
+      <input id="provmodelfind_${safe}" placeholder="🔍 Tìm model…" autocapitalize="off" autocorrect="off" spellcheck="false"
+             style="padding:10px 14px;min-height:44px" oninput="filterProvModels('${jsq(safe)}',this.value)">
+      <div id="provmodelfindrows_${safe}">
+        ${ids.map(id=>`
+          <label class="prov-model-row" style="cursor:pointer">
+            <input type="checkbox" class="prov-model-chk" data-id="${esc(id)}" ${enabledSet.has(id)?"checked":""}>
+            <span class="prov-model-name">${esc(id)}</span>
+          </label>`).join("")}
+      </div>
+      <div class="rowflex" style="margin-top:8px;gap:4px">
         <button class="btn sm" onclick="event.stopPropagation();saveProvModels('${jsq(name)}','${safe}')">💾 Lưu chọn</button>
         <button class="btn sm" onclick="event.stopPropagation();selectAllProvModels('${safe}',true)">Chọn hết</button>
         <button class="btn sm" onclick="event.stopPropagation();selectAllProvModels('${safe}',false)">Bỏ hết</button>
       </div>`;
   }catch(e){ box.innerHTML=`<div style="color:var(--danger);font-size:12.5px">Lỗi: ${esc(e.message)}</div>`; }
+}
+function filterProvModels(safe, q){
+  q = String(q||"").trim().toLowerCase();
+  const rows = document.querySelectorAll("#provmodelfindrows_"+safe+" label.prov-model-row");
+  let shown = 0;
+  rows.forEach(r=>{
+    const nameEl = r.querySelector(".prov-model-name");
+    const hit = !q || (nameEl && String(nameEl.textContent||"").toLowerCase().includes(q));
+    r.style.display = hit ? "" : "none";
+    if(hit) shown++;
+  });
+  const cnt = $("provmodelfindcnt_"+safe);
+  if(cnt) cnt.textContent = q ? shown+"/"+rows.length : String(rows.length);
 }
 function selectAllProvModels(safe, val){
   const box = $("reloadbox_"+safe);

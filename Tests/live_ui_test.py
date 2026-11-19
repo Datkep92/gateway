@@ -132,9 +132,46 @@ DRIVER = """
 (async()=>{
   const $ = id => document.getElementById(id);
   const say = (k,v) => console.log(k + ": " + (typeof v === "string" ? v : JSON.stringify(v)));
+  /* ---- khung DOM giả không tạo con từ innerHTML: dựng lại hàng model để querySelectorAll đọc được ---- */
+  let _lastRows = [];
+  const _rowsFor = (sel) => {
+    if (sel === "#setupModelRows label") {
+      const html = ($("setupModelList")||{innerHTML:""}).innerHTML || "";
+      const out = [], re = /data-model="([^"]+)"/g; let m;
+      while ((m = re.exec(html))) out.push({ style:{}, textContent:m[1] });
+      return out;
+    }
+    const pm = sel.match(/^#provmodelfindrows_(.+?) label\\.prov-model-row$/);
+    if (pm) {
+      const html = ($("reloadbox_"+pm[1])||{innerHTML:""}).innerHTML || "";
+      const out = [], re = /<span class="prov-model-name">([\\s\\S]*?)<\\/span>/g; let m;
+      while ((m = re.exec(html))) { const name = m[1]; out.push({ style:{}, querySelector:() => ({textContent:name}) }); }
+      return out;
+    }
+    return null;
+  };
+  const _qsa = document.querySelectorAll.bind(document);
+  document.querySelectorAll = function(sel){
+    const rows = _rowsFor(sel);
+    if (rows) { _lastRows = rows; return rows; }
+    return _qsa(sel);
+  };
+  const dem = (vis, hid) => _lastRows.filter(r => r.style.display !== "none").length === vis
+      && _lastRows.filter(r => r.style.display === "none").length === hid;
   openSetup(); pickProv("openai");
   $("setupKey").value = "sk-live-000"; $("setupBase").value = MOCK;
   await loadSetupModels();
+  /* ---------- ô tìm model trong Thiết lập nhanh ---------- */
+  say("setup_co_o_tim", (($("setupModelList").innerHTML||"").includes('id="setupModelSearch"')
+      && ($("setupModelList").innerHTML||"").includes("filterSetupModels")));
+  say("setup_co_hang", /data-model="mock-gpt-4o-mini"/.test($("setupModelList").innerHTML||""));
+  filterSetupModels("mini");
+  say("setup_loc_an", dem(1, 2));
+  say("setup_loc_dem", String($("setupModelCount").textContent));
+  filterSetupModels("zzz");
+  say("setup_loc_khong_khop", dem(0, 3) && String($("setupModelCount").textContent) === "0/3");
+  filterSetupModels("");
+  say("setup_loc_giu", dem(3, 0) && String($("setupModelCount").textContent) === "3");
   await runSetup();
   const done = $("setupDone").innerHTML || "";
   const text = done.replace(/<[^>]+>/g," ").replace(/\\s+/g," ").trim();
@@ -205,6 +242,19 @@ DRIVER = """
   say("nhap_khong_key_co_key_moi", typeof CLIENT_KEY === "string" && CLIENT_KEY.length > 20);
   say("nhap_khong_key_luu_key", localStorage.getItem("gw_client_key") === CLIENT_KEY);
   say("key_moi", CLIENT_KEY);
+
+  /* ---------- ô tìm model ở mục Keys: "Tải DS model" ---------- */
+  await reloadProvModels("openai","openai");
+  say("prov_co_o_tim", (($("reloadbox_openai").innerHTML||"").includes("provmodelfind_openai")
+      && ($("reloadbox_openai").innerHTML||"").includes("filterProvModels")));
+  say("prov_co_hang", /label class="prov-model-row"/.test($("reloadbox_openai").innerHTML||""));
+  filterProvModels("openai","gpt");
+  say("prov_loc_an", dem(2, 1));
+  say("prov_loc_dem", String($("provmodelfindcnt_openai").textContent));
+  filterProvModels("openai","zzz");
+  say("prov_loc_khong_khop", dem(0, 3) && String($("provmodelfindcnt_openai").textContent) === "0/3");
+  filterProvModels("openai","");
+  say("prov_loc_bo", dem(3, 0) && String($("provmodelfindcnt_openai").textContent) === "3");
 })().catch(e => { console.log("loi_node: " + (e && e.message)); process.exit(3); });
 """
 
@@ -318,6 +368,24 @@ def main():
         check("lần nhập sau ghi đè cài đặt lần trước", code == 200
               and str((cfg2.get("settings") or {}).get("rate_limit_rpm")) == "888",
               cfg2.get("settings", {}).get("rate_limit_rpm"))
+
+        # ---- ô tìm model trong Thiết lập nhanh ----
+        check("Thiết lập nhanh có ô tìm model", out.get("setup_co_o_tim") == "true", out.get("setup_co_o_tim"))
+        check("Thiết lập nhanh có hàng model để tìm", out.get("setup_co_hang") == "true", out.get("setup_co_hang"))
+        check("ô tìm ở thiết lập lọc đúng model khớp", out.get("setup_loc_an") == "true", out.get("setup_loc_an"))
+        check("ô tìm ở thiết lập đếm đúng số khớp", out.get("setup_loc_dem") == "1/3", out.get("setup_loc_dem"))
+        check("ô tìm ở thiết lập báo không có model khớp", out.get("setup_loc_khong_khop") == "true",
+              out.get("setup_loc_khong_khop"))
+        check("xoá ô tìm ở thiết lập hiện lại tất cả", out.get("setup_loc_giu") == "true", out.get("setup_loc_giu"))
+
+        # ---- ô tìm model ở mục Keys: tải DS model ----
+        check("tải DS model có ô tìm model", out.get("prov_co_o_tim") == "true", out.get("prov_co_o_tim"))
+        check("tải DS model có hàng model để tìm", out.get("prov_co_hang") == "true", out.get("prov_co_hang"))
+        check("ô tìm ở key lọc đúng model khớp", out.get("prov_loc_an") == "true", out.get("prov_loc_an"))
+        check("ô tìm ở key đếm đúng số khớp", out.get("prov_loc_dem") == "2/3", out.get("prov_loc_dem"))
+        check("ô tìm ở key báo không có model khớp", out.get("prov_loc_khong_khop") == "true",
+              out.get("prov_loc_khong_khop"))
+        check("xoá ô tìm ở key hiện lại tất cả", out.get("prov_loc_bo") == "true", out.get("prov_loc_bo"))
     finally:
         proc.terminate()
         try:
