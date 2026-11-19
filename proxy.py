@@ -236,6 +236,10 @@ def test_key_by_id(kid, model=None):
             db.mark_provider_models_due(provider)
         keypool.mark_success(kid)
     elif _model_level(status, msg):
+        # lỗi thuộc về model: không kết luận gì về key. Key bị hệ thống tắt oan
+        # (vd 403 Cloudflare lúc trước) mà giờ lỗi chỉ thuộc model thì bật lại.
+        if keypool.reenable_auto(kid):
+            db.mark_provider_models_due(provider)
         return False, msg                # lỗi thuộc về model: không kết luận gì về key
     else:
         db.set_key_health(kid, "fail", msg)
@@ -289,11 +293,13 @@ def test_model(model_id, timeout=45):
 def _model_level(status, text):
     """Lỗi này có phải do model không (không tồn tại, không được phép dùng...).
 
-    Nhận diện cả 400/404/410/422 (không tìm thấy/chưa bật) lẫn 500/502/503/504/529
-    (lỗi phía server thượng nguồn cho model cụ thể — nhiều khả năng model đó không
-    hoạt động, không phải key bị lỗi). Các lỗi auth (401/403) không phải do model.
+    Nhận diện cả 400/404/410/422 (không tìm thấy/chưa bật), 402 (model trả phí /
+    tài khoản chưa có số dư — model này không dùng được với key hiện tại, key vẫn
+    hợp lệ) lẫn 500/502/503/504/529 (lỗi phía server thượng nguồn cho model cụ thể
+    — nhiều khả năng model đó không hoạt động, không phải key bị lỗi). Các lỗi
+    auth (401/403) không phải do model.
     """
-    if status not in (400, 404, 410, 422, 500, 502, 503, 504, 529):
+    if status not in (400, 402, 404, 410, 422, 500, 502, 503, 504, 529):
         return False
     low = (text or "").lower()
     if "api key" in low or "api_key" in low or "authentication" in low or "unauthorized" in low:
@@ -306,6 +312,14 @@ def _model_level(status, text):
               "model unavailable", "model disabled", "model not available"):
         if w in low:
             return True
+    # 402: model cần trả phí / tài khoản chưa nạp tiền → model này không dùng được
+    # với key hiện tại, nhưng key vẫn tốt và các model miễn phí khác vẫn chạy.
+    if status == 402:
+        for w in ("free tier", "credit", "balance", "payment", "insufficient",
+                  "billing", "quota", "top up", "upgrade", "paid"):
+            if w in low:
+                return True
+        return False
     # 5xx không có text model rõ ràng → vẫn coi là lỗi model để tránh phạt key oan
     if status >= 500:
         return True
